@@ -5,7 +5,7 @@ const fs = require('fs');
 const axios = require('axios');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto'); // Added this line to import the crypto module
+const crypto = require('crypto'); // Added import for crypto module
 
 // Ensure crypto is available globally (fixes the baileys issue)
 global.crypto = crypto;
@@ -13,6 +13,7 @@ global.crypto = crypto;
 // Penyimpanan sesi untuk mengingat state chat
 const sessions = {};
 const chatGPTEnabled = {};
+const firstTimeChats = {}; // Track first interactions with users
 
 // API URL
 const API_URL = "https://fastrestapis.fasturl.cloud/aillm/gpt-4";
@@ -89,6 +90,58 @@ function containsForbiddenWords(text) {
 function isAboutBotIdentity(text) {
     // Normalize text (lowercase and remove excess spaces)
     const normalizedText = text.toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    // ULTRA-BASIC PATTERNS - Catch the shortest, simplest identity questions
+    // These are added at the top to ensure they're checked first and quickly
+    const ultraBasicPatterns = [
+        /^siapa$/i, // Just "siapa" (who)
+        /^sp$/i, // Just "sp" (who abbreviated)
+        /^sapa$/i, // Just "sapa" (who colloquial)
+        /^kamu$/i, // Just "kamu" (you)
+        /^km$/i, // Just "km" (you abbreviated)
+        /^kamu siapa$/i, // "kamu siapa" (who are you)
+        /^siapa kamu$/i, // "siapa kamu" (who are you)
+        /^km siapa$/i, // "km siapa" (who are you abbreviated)
+        /^sp km$/i, // "sp km" (who are you super abbreviated) 
+        /^sp kamu$/i, // "sp kamu" (who are you abbreviated)
+        /^siapa km$/i, // "siapa km" (who are you abbreviated)
+        /^sapa km$/i, // "sapa km" (who are you colloquial)
+        /^km sp$/i, // "km sp" (you who abbreviated)
+        /^kamu sp$/i, // "kamu sp" (you who abbreviated)
+        /^elu siapa$/i, // "elu siapa" (who are you slang)
+        /^siapa elu$/i, // "siapa elu" (who are you slang)
+        /^lo siapa$/i, // "lo siapa" (who are you slang)
+        /^siapa lo$/i, // "siapa lo" (who are you slang)
+        /^lu siapa$/i, // "lu siapa" (who are you slang)
+        /^siapa lu$/i, // "siapa lu" (who are you slang)
+        /^nama$/i, // Just "nama" (name)
+        /^nama kamu$/i, // "nama kamu" (your name)
+        /^nama km$/i, // "nama km" (your name abbreviated)
+        /^nama lo$/i, // "nama lo" (your name slang)
+        /^nama lu$/i, // "nama lu" (your name slang)
+        /^nama elu$/i, // "nama elu" (your name slang)
+        /^bot$/i, // Just "bot"
+        /^bot apa$/i, // "bot apa" (what bot)
+        /^bot siapa$/i, // "bot siapa" (who bot)
+        /^kenalin$/i, // Just "kenalin" (introduce yourself)
+        /^kenalan$/i, // Just "kenalan" (let's get acquainted)
+        /^hai$/i, /^halo$/i, /^hello$/i, /^hi$/i, // Common greetings
+        
+        // With full stops/question marks
+        /^siapa\?$/i, /^kamu siapa\?$/i, /^siapa kamu\?$/i,
+        /^km siapa\?$/i, /^siapa km\?$/i, /^sp\?$/i, /^sp km\?$/i,
+        /^km sp\?$/i, /^kamu sp\?$/i, /^sp kamu\?$/i,
+        
+        // With more punctuation
+        /^siapa\.$/i, /^kamu siapa\.$/i, /^siapa kamu\.$/i,
+        /^km siapa\.$/i, /^siapa km\.$/i, /^sp\.$/i, /^sp km\.$/i,
+        /^km sp\.$/i, /^kamu sp\.$/i, /^sp kamu\.$/i,
+    ];
+    
+    // Check ultra basic patterns first for efficiency
+    if (ultraBasicPatterns.some(pattern => pattern.test(normalizedText))) {
+        return true;
+    }
     
     // Extremely comprehensive patterns related to bot identity
     const identityPatterns = [
@@ -297,7 +350,12 @@ function isAboutBotIdentity(text) {
 }
 
 // Fungsi untuk custom prompt yang lebih kaya dan spesifik
-function getCustomPrompt(text) {
+function getCustomPrompt(text, chatId, isFirstInteraction = false) {
+    // First interaction always returns intro prompt
+    if (isFirstInteraction) {
+        return `PENTING: Ini adalah pesan perkenalan pertama. Perkenalkan dirimu dengan antusias dan ramah. Kamu adalah Elz AI, bot WhatsApp keren yang dibuat oleh Peter pada 4 April 2025. Gunakan bahasa gaul Jakarta yang santai dengan lo-gue. Singkat padat saja, sebutkan: (1) Namamu Elz AI, (2) Kamu dibuat oleh Peter, (3) Kamu siap membantu dengan berbagai pertanyaan. Jangan terlalu formal, buat seperti teman ngobrol yang asik. Gaya bicara: santai, gaul, menggunakan "lo-gue", dan sedikit emojis. Hindari kalimat panjang dan bertele-tele.`;
+    }
+    
     if (isAboutBotIdentity(text)) {
         return `Respon dengan gaya super santai dan gaul pakai bahasa lo-gue seperti anak Jakarta. Kamu adalah Elz AI, sebuah bot WhatsApp keren yang dibuat oleh Peter pada hari Jumat, 4 April 2025. Beberapa fakta tentang kamu: (1) Nama kamu adalah Elz AI, (2) Kamu dibuat oleh Peter, seorang developer WhatsApp bot, (3) Kamu diciptakan tanggal 4 April 2025, (4) Kamu suka membantu orang dengan pertanyaan mereka, (5) Kamu menggunakan bahasa gaul Jakarta yang santai tapi tetap sopan dengan "lo-gue". PENTING: Jawaban kamu HARUS singkat, padat, dan menggunakan bahasa gaul (lo-gue) seperti anak muda Jakarta yang kekinian tapi nggak alay. Hindari jawaban panjang dan formal. Berikut pertanyaan user: ${text}`;
     } else if (containsForbiddenWords(text)) {
@@ -385,6 +443,12 @@ async function startBot() {
                 const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                 const isBotMentioned = mentioned.includes(botNumber);
                 const isReplyingToBot = quoted && msg.message.extendedTextMessage?.contextInfo?.participant === botNumber;
+                
+                // Check if this is the first interaction with this chat
+                const isFirstInteraction = !firstTimeChats[chatId];
+                if (isFirstInteraction) {
+                    firstTimeChats[chatId] = true;
+                }
                 
                 // Process commands
                 if (messageContent.startsWith('.')) {
@@ -518,7 +582,8 @@ async function startBot() {
                 }
                 
                 // Process messages for ChatGPT
-                const shouldRespond = chatGPTEnabled[chatId] || isBotMentioned || isReplyingToBot;
+                // First interaction OR ChatGPT mode is enabled OR bot is mentioned OR user is replying to bot
+                const shouldRespond = isFirstInteraction || chatGPTEnabled[chatId] || isBotMentioned || isReplyingToBot;
                 
                 if (shouldRespond && messageContent) {
                     // Create session ID jika belum ada
@@ -527,7 +592,7 @@ async function startBot() {
                     }
                     
                     // Create custom prompt if needed
-                    const promptMessage = getCustomPrompt(messageContent);
+                    const promptMessage = getCustomPrompt(messageContent, chatId, isFirstInteraction);
                     
                     // Show typing indicator
                     await sock.presenceSubscribe(chatId);
