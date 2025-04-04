@@ -6,6 +6,9 @@ const axios = require('axios');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
+// Ensure crypto is available globally (fixes the baileys issue)
+global.crypto = crypto;
+
 // Penyimpanan sesi untuk mengingat state chat
 const sessions = {};
 const chatGPTEnabled = {};
