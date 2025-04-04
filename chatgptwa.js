@@ -5,6 +5,7 @@ const fs = require('fs');
 const axios = require('axios');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 // Ensure crypto is available globally (fixes the baileys issue)
 global.crypto = crypto;
