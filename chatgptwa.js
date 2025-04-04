@@ -333,7 +333,7 @@ function isAboutBotIdentity(text) {
  */
 function getCustomPrompt(text, chatId, isFirstInteraction = false) {
     // Base instruction to avoid emojis in all responses
-    const noEmojiInstruction = "PENTING: JANGAN GUNAKAN EMOJI SAMA SEKALI DALAM RESPON. HINDARI SEGALA JENIS EMOJI DAN EMOTICON DAN HINDARI PENGGUNAAN HURUF KAPITAL";
+    const noEmojiInstruction = "PENTING: JANGAN GUNAKAN EMOJI SAMA SEKALI DALAM RESPON DAN DI MASA MENDATANG, HINDARI SEGALA PENGGUNAAN JENIS EMOJI DAN EMOTICON DALAM RESPON LU DAN HINDARI PENGGUNAAN HURUF KAPITAL DALAM RESPON LU";
     
     // First interaction always returns intro prompt
     if (isFirstInteraction) {
