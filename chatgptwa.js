@@ -53,7 +53,7 @@ function isAboutBotIdentity(text) {
 // Fungsi untuk custom prompt
 function getCustomPrompt(text) {
     if (isAboutBotIdentity(text)) {
-        return `Jawab atau respon singkat padat seolah kamu adalah Elz AI, bot WhatsApp yang dibuat sama Peter pada hari Jumat, 4 April 2025 secara permanent, Jawab pertanyaan berikut dengan bahasa gaul anak indo yang ga alay bahasa nya harus ky pake lo gue : ${text}`;
+        return `Jawab atau respon singkat padat seolah kamu adalah Elz AI, bot WhatsApp yang dibuat di coding sama Peter pada hari Jumat, 4 April 2025 secara permanent, Jawab pertanyaan berikut dengan bahasa gaul anak indo yang ga alay bahasa nya harus ky pake lo gue : ${text}`;
     } else if (containsForbiddenWords(text)) {
         return `jawab dengan singkat seolah kamu adalah bot yang harus menolak dan menegur dengan keras dan bahasa gaul kasar ketika ada yang menanyakan atau membahas soal "darmawati", "darma", "wati", "hot", atau "orangtua Peter" dll Larang pengguna dan beri tahu bahwa mengejek developer bot yaitu peter dengan kata-kata tersebut itu tidak diperbolehkan dan hargai dia, Berikut pesannya: ${text}`;
     }
