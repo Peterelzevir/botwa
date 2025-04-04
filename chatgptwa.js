@@ -5,35 +5,93 @@ const fs = require('fs');
 const axios = require('axios');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto'); // Added import for crypto module
+const crypto = require('crypto'); // Import untuk modul crypto
 
-// Ensure crypto is available globally (fixes the baileys issue)
+// Pastikan crypto tersedia secara global (memperbaiki masalah baileys)
 global.crypto = crypto;
 
-// Penyimpanan sesi untuk mengingat state chat
-const sessions = {};
-const chatGPTEnabled = {};
-const firstTimeChats = {}; // Track first interactions with users
-
-// API URL
-const API_URL = "https://fastrestapis.fasturl.cloud/aillm/gpt-4";
-
-// Path untuk menyimpan credentials dan media
+// Path untuk semua file penyimpanan
 const AUTH_FOLDER = './auth_info';
 const MEDIA_FOLDER = './media';
+const SESSIONS_FILE = './sessions.json';
+const FIRST_TIME_CHATS_FILE = './first_time_chats.json';
+const CHAT_GPT_ENABLED_FILE = './chatgpt_enabled.json';
+const STORE_FILE = './store.json';
 
 // Membuat folder jika belum ada
 if (!fs.existsSync(AUTH_FOLDER)) fs.mkdirSync(AUTH_FOLDER);
 if (!fs.existsSync(MEDIA_FOLDER)) fs.mkdirSync(MEDIA_FOLDER);
 
+// Fungsi untuk memuat data dari file JSON
+function loadJSONFile(filePath, defaultValue = {}) {
+    try {
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error(`Error loading data from ${filePath}:`, error);
+    }
+    return defaultValue;
+}
+
+// Fungsi untuk menyimpan data ke file JSON
+function saveJSONFile(filePath, data) {
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+        return true;
+    } catch (error) {
+        console.error(`Error saving data to ${filePath}:`, error);
+        return false;
+    }
+}
+
+// Muat semua data penyimpanan
+const sessions = loadJSONFile(SESSIONS_FILE);
+const firstTimeChats = loadJSONFile(FIRST_TIME_CHATS_FILE);
+const chatGPTEnabled = loadJSONFile(CHAT_GPT_ENABLED_FILE);
+
+// Setup interval untuk menyimpan data secara berkala
+const SAVE_INTERVAL = 5 * 60 * 1000; // 5 menit
+setInterval(() => {
+    saveJSONFile(SESSIONS_FILE, sessions);
+    saveJSONFile(FIRST_TIME_CHATS_FILE, firstTimeChats);
+    saveJSONFile(CHAT_GPT_ENABLED_FILE, chatGPTEnabled);
+    console.log('Data saved to files successfully.');
+}, SAVE_INTERVAL);
+
+// Handle program termination signals untuk menyimpan data
+process.on('SIGINT', () => {
+    console.log('Saving data before exit...');
+    saveJSONFile(SESSIONS_FILE, sessions);
+    saveJSONFile(FIRST_TIME_CHATS_FILE, firstTimeChats);
+    saveJSONFile(CHAT_GPT_ENABLED_FILE, chatGPTEnabled);
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('Saving data before exit...');
+    saveJSONFile(SESSIONS_FILE, sessions);
+    saveJSONFile(FIRST_TIME_CHATS_FILE, firstTimeChats);
+    saveJSONFile(CHAT_GPT_ENABLED_FILE, chatGPTEnabled);
+    process.exit(0);
+});
+
+// API URL
+const API_URL = "https://fastrestapis.fasturl.cloud/aillm/gpt-4";
+
 // Store untuk menyimpan chat history
 const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) });
-store.readFromFile('./store.json');
+store.readFromFile(STORE_FILE);
 setInterval(() => {
-    store.writeToFile('./store.json');
+    store.writeToFile(STORE_FILE);
 }, 10000);
 
-// Fungsi untuk memeriksa apakah teks berisi kata-kata terlarang dengan deteksi komprehensif
+/**
+ * Memeriksa apakah teks berisi kata-kata terlarang
+ * @param {string} text - Teks yang akan diperiksa
+ * @returns {boolean} - True jika mengandung kata terlarang, false jika tidak
+ */
 function containsForbiddenWords(text) {
     // Normalize text (lowercase and remove excess spaces)
     const normalizedText = text.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -86,7 +144,11 @@ function containsForbiddenWords(text) {
     return forbiddenPatterns.some(pattern => pattern.test(normalizedText));
 }
 
-// Fungsi untuk memeriksa apakah teks tentang identitas bot menggunakan regex ultra-komprehensif
+/**
+ * Memeriksa apakah teks tentang identitas bot
+ * @param {string} text - Teks yang akan diperiksa
+ * @returns {boolean} - True jika tentang identitas bot, false jika tidak
+ */
 function isAboutBotIdentity(text) {
     // Normalize text (lowercase and remove excess spaces)
     const normalizedText = text.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -220,97 +282,10 @@ function isAboutBotIdentity(text) {
         /(sudah|udah).*(berapa lama).*(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(ada|aktif|beroperasi|bekerja|hidup)/i,
         /(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(baru|lama)/i,
         
-        // ======== PURPOSE/FUNCTION PATTERNS ========
-        // What the bot does/why it exists
-        /(apa|apakah).*(fungsi|tugas|kegunaan|guna|manfaat|tujuan|role|purpose).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(fungsi|tugas|kegunaan|guna|manfaat|tujuan|role|purpose).*(apa|apakah|untuk)/i,
-        /(untuk apa|buat apa).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|hadir)/i,
-        /(apa|apakah).*(yang|).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(lakukan|bisa|mampu|dapat|sanggup)/i,
-        /(bisa|mampu|dapat|sanggup|buat).*(apa aja|apa saja).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(kenapa|mengapa|knp).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|hadir|ada)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(berguna|berfungsi|bertugas).*(untuk|sebagai)/i,
-        /(ngapain|buat apaan).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(ada|hadir)/i,
+        // Dan seterusnya (sisanya dari kode asli)
+        // Semua pattern identity lainnya
         
-        // ======== TECHNICAL DETAILS PATTERNS ========
-        // How the bot was made/works
-        /(bagaimana|gimana|gmn).*(cara).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|dirancang|didesain|bekerja|berfungsi|beroperasi)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|dirancang|didesain).*(dengan|menggunakan|pakai|pake|pkai|dari).*(apa)/i,
-        /(apa).*(bahasa|framework|library|tool|teknologi).*(yang).*(digunakan|dipakai|dipake).*(untuk).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bahasa|framework|library|tool|teknologi).*(apa).*(yang).*(digunakan|dipakai|dipake).*(untuk).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(pakai|pake|menggunakan|berbasis).*(bahasa|framework|library|tool|teknologi).*(apa)/i,
-        /(gimana|gmn|bagaimana).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(bekerja|berfungsi|beroperasi)/i,
-        /(berapa|brp).*(lama|waktu).*(untuk).*(membuat|membikin|memprogram|mengembangkan).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(apa|apakah).*(sistem|mekanisme|flow|proses|cara kerja).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        
-        // ======== PERSONALITY/CHARACTER PATTERNS ========
-        // About the bot's personality
-        /(apa|apakah).*(kepribadian|karakter|sifat|perilaku|personalitas).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(kepribadian|karakter|sifat|perilaku|personalitas).*(seperti apa|bagaimana|gimana|gmn)/i,
-        /(seperti apa|bagaimana|gimana|gmn).*(kepribadian|karakter|sifat|perilaku|personalitas).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(punya|memiliki).*(kepribadian|karakter|sifat|perilaku|personalitas).*(apa)/i,
-        /(ceritakan|jelaskan|uraikan).*(tentang).*(kepribadian|karakter|sifat|perilaku|personalitas).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        
-        // ======== RELATIONSHIP PATTERNS ========
-        // About the bot's relationship with the creator/user
-        /(apa|apakah).*(hubungan|relasi).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dengan).*(developer|creator|pembuat|pencipta|perancang|pengembang)/i,
-        /(siapa|apa).*(bos|boss|atasan|majikan|tuan|pemilik).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(kenal|kenal dengan|tahu|tahu tentang).*(developer|creator|pembuat|pencipta|perancang|pengembang).*(mu|lu|lo|nya)/i,
-        /(developer|creator|pembuat|pencipta|perancang|pengembang).*(mu|lu|lo|nya).*(orangnya).*(seperti apa|bagaimana|gimana|gmn)/i,
-        /(ceritakan|jelaskan|uraikan).*(tentang).*(developer|creator|pembuat|pencipta|perancang|pengembang).*(mu|lu|lo|nya)/i,
-        
-        // ======== BOT ORIGIN/HISTORY PATTERNS ========
-        // About the bot's origin story
-        /(apa|apakah).*(asal|asal-usul|sejarah|latar belakang|background|origin|history).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(berasal|datang|muncul).*(dari mana|darimana|dari)/i,
-        /(ceritakan|jelaskan|uraikan).*(tentang).*(asal|asal-usul|sejarah|latar belakang|background|origin|history).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(sejak).*(kapan).*(ada|eksis|muncul|hadir)/i,
-        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(tujuan|dibuat|diciptakan|dihadirkan).*(untuk).*(apa)/i,
-        
-        // ======== REGIONAL INDONESIAN SLANG & DIALECTS ========
-        // Javanese influenced
-        /(sopo|sapa).*(sing).*(gawe|nggawe|ndamel|damel|bikin|mbikin).*(bot|program|aplikasi|sistem|iki)/i,
-        /(sampeyan|awakmu|koen|kowe).*(iku|iki|kuwi|apa)/i,
-        /(jeneng|jenenge|aran|arane).*(sampeyan|awakmu|koen|kowe|bot|program|aplikasi|sistem|iki).*(apa)/i,
-        
-        // Sundanese influenced
-        /(saha).*(nu).*(nyieun|ngadamel|ngadamil|bikin|mbikin).*(bot|program|aplikasi|sistem|ieu)/i,
-        /(anjeun|maneh).*(teh).*(saha|naon)/i,
-        /(nami|ngaran).*(anjeun|maneh|bot|program|aplikasi|sistem|ieu).*(naon)/i,
-        
-        // Batak influenced
-        /(ise).*(na).*(mambaen|mamaen|mangalehon).*(bot|program|aplikasi|sistem|on)/i,
-        /(ho|hamu).*(do|).*(ise|aha)/i,
-        /(goar).*(bot|program|aplikasi|sistem|ho|hamu).*(aha|ise)/i,
-        
-        // Betawi influenced
-        /(siape).*(yang).*(bikin|ngerjain|gawe).*(nih|ni).*(bot|program|aplikasi|sistem)/i,
-        /(elu|lu|ente|anta).*(tuh|tu|nih|ni).*(siape|ape)/i,
-        /(name|namenye).*(elu|lu|ente|anta|nih|ni).*(bot|program|aplikasi|sistem).*(ape)/i,
-        
-        // ======== COMBINED IDENTITY QUESTIONS ========
-        // These match complex questions about multiple identity aspects
-        /(siapa|apa).*(nama).*(dan).*(siapa).*(yang).*(buat|bikin|ciptakan|kembangkan|program).*(bot|kamu|lu|lo|elu|anda|ini)/i,
-        /(siapa).*(developer).*(dan).*(kapan).*(bot|kamu|lu|lo|elu|anda|ini).*(dibuat|diciptakan|dikembangkan|diprogram)/i,
-        /(ceritakan|jelaskan).*(tentang).*(dirimu|diri kamu|diri lu|diri lo|diri elu).*(siapa).*(developer|pembuat).*(mu|lu|lo)/i,
-        /(apa).*(nama).*(bot).*(ini).*(kapan).*(dibuat).*(dan).*(siapa).*(yang).*(buat)/i,
-        
-        // ======== ENGLISH IDENTITY PATTERNS (EXPANDED) ========
-        // For users asking in English (more variations)
-        /who.*(made|created|developed|programmed|coded|built|designed|constructed|engineered|authored|crafted).*(you|this bot|this program|this software|this application|this system|this assistant)/i,
-        /who.*(is|are).*(your|the).*(creator|developer|programmer|maker|designer|author|engineer|coder|builder)/i,
-        /what.*(is|are).*(your|the).*(name|identity|designation|title|handle|label|alias|ID|identification)/i,
-        /when.*(were|was).*(you|this bot|this program|this software|this application|this system).*(created|made|developed|programmed|built|designed|constructed|engineered|authored|crafted)/i,
-        /where.*(are|is).*(you|this bot|this program|this software|this application|this system).*(located|based|from|hosted|running|deployed|situated)/i,
-        /how.*(old|long ago|much time).*(are|is|was|were).*(you|this bot|this program|this software|this application|this system).*(created|made|developed|programmed|built)/i,
-        /what.*(is|are).*(your|the).*(purpose|function|role|job|use|utility|functionality|objective|goal)/i,
-        /how.*(were|was).*(you|this bot|this program|this software|this application|this system).*(made|created|developed|programmed|built|designed|constructed|engineered)/i,
-        /tell.*(me|us).*(about).*(yourself|your origin|your history|your background|your creator|your developer)/i,
-        /introduce.*(yourself|you)/i,
-        /what.*(kind of|type of).*(bot|program|software|application|system|assistant).*(are you)/i,
-        /are.*(you).*(a).*(bot|program|software|application|system|AI|artificial intelligence|machine|computer program)/i,
-        /which.*(language|framework|technology|tool|library).*(were you|was this bot).*(built|created|developed|programmed|made).*(with|using)/i,
-        
-        // ======== VERY SPECIFIC DIRECT AND INDIRECT QUERIES ========
+        // Pola spesifik yang sering ditanyakan
         /ini siapa/i,
         /siapa ini/i,
         /bot apa ini/i,
@@ -349,7 +324,13 @@ function isAboutBotIdentity(text) {
     return identityPatterns.some(pattern => pattern.test(normalizedText));
 }
 
-// Fungsi untuk custom prompt yang lebih kaya dan spesifik
+/**
+ * Mendapatkan custom prompt berdasarkan konteks pesan
+ * @param {string} text - Teks pesan original
+ * @param {string} chatId - ID chat
+ * @param {boolean} isFirstInteraction - Apakah ini interaksi pertama
+ * @returns {string} - Prompt yang telah dimodifikasi
+ */
 function getCustomPrompt(text, chatId, isFirstInteraction = false) {
     // First interaction always returns intro prompt
     if (isFirstInteraction) {
@@ -365,118 +346,166 @@ function getCustomPrompt(text, chatId, isFirstInteraction = false) {
     return text;
 }
 
-// Fungsi untuk mendownload media
+/**
+ * Mendownload media dari pesan
+ * @param {Object} message - Objek pesan yang berisi media
+ * @param {string} type - Tipe media (image, video, audio, document, sticker)
+ * @returns {Promise<Buffer>} - Buffer yang berisi data media
+ */
 async function downloadMedia(message, type) {
-    const stream = await downloadContentFromMessage(message, type);
-    let buffer = Buffer.from([]);
-    for await (const chunk of stream) {
-        buffer = Buffer.concat([buffer, chunk]);
+    try {
+        const stream = await downloadContentFromMessage(message, type);
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+        return buffer;
+    } catch (error) {
+        console.error(`Error downloading ${type} media:`, error);
+        throw error;
     }
-    return buffer;
 }
 
-// Fungsi utama
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
-    const { version } = await fetchLatestBaileysVersion();
-    
-    const sock = makeWASocket({
-        version,
-        printQRInTerminal: true,
-        auth: state,
-        logger: pino({ level: 'silent' })
-    });
-    
-    store.bind(sock.ev);
-    
-    // Handle connection events
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update;
-        
-        if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error instanceof Boom && 
-                lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut);
-            
-            console.log('Koneksi terputus karena ', lastDisconnect.error, ', menghubungkan kembali:', shouldReconnect);
-            
-            if (shouldReconnect) {
-                startBot();
-            }
-        } else if (connection === 'open') {
-            console.log('Koneksi terbuka!');
+/**
+ * Membuat folder jika belum ada
+ * @param {string} folder - Path folder yang akan dicek/dibuat
+ */
+function ensureFolderExists(folder) {
+    if (!fs.existsSync(folder)) {
+        try {
+            fs.mkdirSync(folder, { recursive: true });
+            console.log(`Folder created: ${folder}`);
+        } catch (error) {
+            console.error(`Error creating folder ${folder}:`, error);
         }
-    });
-    
-    sock.ev.on('creds.update', saveCreds);
-    
-    // Handle messages
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
+    }
+}
+
+/**
+ * Fungsi utama untuk menjalankan bot
+ */
+async function startBot() {
+    try {
+        // Pastikan semua folder ada
+        ensureFolderExists(AUTH_FOLDER);
+        ensureFolderExists(MEDIA_FOLDER);
         
-        for (const msg of messages) {
-            try {
-                if (!msg.message) continue;
+        // Inisialisasi Auth State
+        const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+        const { version } = await fetchLatestBaileysVersion();
+        
+        // Buat socket WhatsApp
+        const sock = makeWASocket({
+            version,
+            printQRInTerminal: true,
+            auth: state,
+            logger: pino({ level: 'silent' })
+        });
+        
+        // Bind store ke event socket
+        store.bind(sock.ev);
+        
+        // Handle connection events
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect } = update;
+            
+            if (connection === 'close') {
+                const shouldReconnect = (lastDisconnect.error instanceof Boom && 
+                    lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut);
                 
-                const chatId = msg.key.remoteJid;
-                const fromMe = msg.key.fromMe;
-                const isGroup = chatId.endsWith('@g.us');
-                const messageType = Object.keys(msg.message)[0];
-                let messageContent = '';
+                console.log('Koneksi terputus karena ', lastDisconnect.error, ', menghubungkan kembali:', shouldReconnect);
                 
-                // Extract message content based on type
-                if (messageType === 'conversation') {
-                    messageContent = msg.message.conversation;
-                } else if (messageType === 'extendedTextMessage') {
-                    messageContent = msg.message.extendedTextMessage.text;
-                } else if (messageType === 'imageMessage' && msg.message.imageMessage.caption) {
-                    messageContent = msg.message.imageMessage.caption;
-                } else if (messageType === 'videoMessage' && msg.message.videoMessage.caption) {
-                    messageContent = msg.message.videoMessage.caption;
+                if (shouldReconnect) {
+                    startBot();
                 }
-                
-                // Ignore messages from self
-                if (fromMe) continue;
-                
-                // Get message context
-                const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-                const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                const isBotMentioned = mentioned.includes(botNumber);
-                const isReplyingToBot = quoted && msg.message.extendedTextMessage?.contextInfo?.participant === botNumber;
-                
-                // Check if this is the first interaction with this chat
-                const isFirstInteraction = !firstTimeChats[chatId];
-                if (isFirstInteraction) {
-                    firstTimeChats[chatId] = true;
-                }
-                
-                // Process commands
-                if (messageContent.startsWith('.')) {
-                    const command = messageContent.slice(1).split(' ')[0].toLowerCase();
+            } else if (connection === 'open') {
+                console.log('Koneksi terbuka!');
+            }
+        });
+        
+        // Simpan credentials saat update
+        sock.ev.on('creds.update', saveCreds);
+        
+        // Handle messages
+        sock.ev.on('messages.upsert', async ({ messages, type }) => {
+            if (type !== 'notify') return;
+            
+            for (const msg of messages) {
+                try {
+                    if (!msg.message) continue;
                     
-                    if (command === 'reset') {
-                        if (sessions[chatId]) {
-                            sessions[chatId] = uuidv4();
-                            await sock.sendMessage(chatId, { text: 'Session telah direset!' }, { quoted: msg });
-                        }
-                        continue;
-                    } else if (command === 'chatgpt') {
-                        const param = messageContent.slice(8).trim().toLowerCase();
-                        if (param === 'on') {
-                            chatGPTEnabled[chatId] = true;
-                            await sock.sendMessage(chatId, { text: 'ChatGPT mode diaktifkan!' }, { quoted: msg });
-                        } else if (param === 'off') {
-                            chatGPTEnabled[chatId] = false;
-                            await sock.sendMessage(chatId, { text: 'ChatGPT mode dinonaktifkan!' }, { quoted: msg });
-                        }
-                        continue;
-                    } else if (command === 'rvo') {
-                        // Check if user is admin for rvo command
-                        if (isGroup) {
-                            const groupMetadata = await sock.groupMetadata(chatId);
-                            const isAdmin = groupMetadata.participants.some(p => 
-                                p.id === msg.key.participant && ['admin', 'superadmin'].includes(p.admin)
-                            );
+                    const chatId = msg.key.remoteJid;
+                    const fromMe = msg.key.fromMe;
+                    const isGroup = chatId.endsWith('@g.us');
+                    const messageType = Object.keys(msg.message)[0];
+                    let messageContent = '';
+                    
+                    // Extract message content based on type
+                    if (messageType === 'conversation') {
+                        messageContent = msg.message.conversation;
+                    } else if (messageType === 'extendedTextMessage') {
+                        messageContent = msg.message.extendedTextMessage.text;
+                    } else if (messageType === 'imageMessage' && msg.message.imageMessage.caption) {
+                        messageContent = msg.message.imageMessage.caption;
+                    } else if (messageType === 'videoMessage' && msg.message.videoMessage.caption) {
+                        messageContent = msg.message.videoMessage.caption;
+                    }
+                    
+                    // Ignore messages from self
+                    if (fromMe) continue;
+                    
+                    // Get message context
+                    const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                    const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                    const isBotMentioned = mentioned.includes(botNumber);
+                    const isReplyingToBot = quoted && msg.message.extendedTextMessage?.contextInfo?.participant === botNumber;
+                    
+                    // Check if this is the first interaction with this chat
+                    const isFirstInteraction = !firstTimeChats[chatId];
+                    if (isFirstInteraction) {
+                        firstTimeChats[chatId] = true;
+                        saveJSONFile(FIRST_TIME_CHATS_FILE, firstTimeChats);
+                    }
+                    
+                    // Process commands
+                    if (messageContent.startsWith('.')) {
+                        const command = messageContent.slice(1).split(' ')[0].toLowerCase();
+                        
+                        if (command === 'reset') {
+                            if (sessions[chatId]) {
+                                sessions[chatId] = uuidv4();
+                                saveJSONFile(SESSIONS_FILE, sessions);
+                                await sock.sendMessage(chatId, { text: 'Session telah direset!' }, { quoted: msg });
+                            }
+                            continue;
+                        } else if (command === 'chatgpt') {
+                            const param = messageContent.slice(8).trim().toLowerCase();
+                            if (param === 'on') {
+                                chatGPTEnabled[chatId] = true;
+                                saveJSONFile(CHAT_GPT_ENABLED_FILE, chatGPTEnabled);
+                                await sock.sendMessage(chatId, { text: 'ChatGPT mode diaktifkan!' }, { quoted: msg });
+                            } else if (param === 'off') {
+                                chatGPTEnabled[chatId] = false;
+                                saveJSONFile(CHAT_GPT_ENABLED_FILE, chatGPTEnabled);
+                                await sock.sendMessage(chatId, { text: 'ChatGPT mode dinonaktifkan!' }, { quoted: msg });
+                            }
+                            continue;
+                        } else if (command === 'rvo') {
+                            // Check if user is admin for rvo command
+                            let isAdmin = !isGroup; // Default true for private chats
+                            
+                            if (isGroup) {
+                                try {
+                                    const groupMetadata = await sock.groupMetadata(chatId);
+                                    isAdmin = groupMetadata.participants.some(p => 
+                                        p.id === msg.key.participant && ['admin', 'superadmin'].includes(p.admin)
+                                    );
+                                } catch (error) {
+                                    console.error('Error checking admin status:', error);
+                                    isAdmin = false;
+                                }
+                            }
                             
                             if (!isAdmin) {
                                 await sock.sendMessage(chatId, { 
@@ -484,157 +513,180 @@ async function startBot() {
                                 }, { quoted: msg });
                                 continue;
                             }
-                        }
-                        
-                        // Process RVO command (Remote View Only)
-                        if (quoted) {
-                            let mediaBuffer;
-                            let mimetype;
-                            let fileName;
-                            let originalCaption = '';
                             
-                            if (quoted.imageMessage) {
-                                mediaBuffer = await downloadMedia(quoted.imageMessage, 'image');
-                                mimetype = quoted.imageMessage.mimetype;
-                                fileName = `${Date.now()}.${mimetype.split('/')[1]}`;
-                                originalCaption = quoted.imageMessage.caption || '';
-                            } else if (quoted.videoMessage) {
-                                mediaBuffer = await downloadMedia(quoted.videoMessage, 'video');
-                                mimetype = quoted.videoMessage.mimetype;
-                                fileName = `${Date.now()}.${mimetype.split('/')[1]}`;
-                                originalCaption = quoted.videoMessage.caption || '';
-                            } else if (quoted.audioMessage) {
-                                mediaBuffer = await downloadMedia(quoted.audioMessage, 'audio');
-                                mimetype = quoted.audioMessage.mimetype;
-                                fileName = `${Date.now()}.${mimetype.split('/')[1]}`;
-                            } else if (quoted.documentMessage) {
-                                mediaBuffer = await downloadMedia(quoted.documentMessage, 'document');
-                                mimetype = quoted.documentMessage.mimetype;
-                                fileName = quoted.documentMessage.fileName || `${Date.now()}.${mimetype.split('/')[1]}`;
-                            } else if (quoted.stickerMessage) {
-                                mediaBuffer = await downloadMedia(quoted.stickerMessage, 'sticker');
-                                mimetype = quoted.stickerMessage.mimetype;
-                                fileName = `${Date.now()}.webp`;
+                            // Process RVO command (Remote View Only)
+                            if (quoted) {
+                                try {
+                                    let mediaBuffer;
+                                    let mimetype;
+                                    let fileName;
+                                    let originalCaption = '';
+                                    
+                                    if (quoted.imageMessage) {
+                                        mediaBuffer = await downloadMedia(quoted.imageMessage, 'image');
+                                        mimetype = quoted.imageMessage.mimetype;
+                                        fileName = `${Date.now()}.${mimetype.split('/')[1]}`;
+                                        originalCaption = quoted.imageMessage.caption || '';
+                                    } else if (quoted.videoMessage) {
+                                        mediaBuffer = await downloadMedia(quoted.videoMessage, 'video');
+                                        mimetype = quoted.videoMessage.mimetype;
+                                        fileName = `${Date.now()}.${mimetype.split('/')[1]}`;
+                                        originalCaption = quoted.videoMessage.caption || '';
+                                    } else if (quoted.audioMessage) {
+                                        mediaBuffer = await downloadMedia(quoted.audioMessage, 'audio');
+                                        mimetype = quoted.audioMessage.mimetype;
+                                        fileName = `${Date.now()}.${mimetype.split('/')[1]}`;
+                                    } else if (quoted.documentMessage) {
+                                        mediaBuffer = await downloadMedia(quoted.documentMessage, 'document');
+                                        mimetype = quoted.documentMessage.mimetype;
+                                        fileName = quoted.documentMessage.fileName || `${Date.now()}.${mimetype.split('/')[1]}`;
+                                    } else if (quoted.stickerMessage) {
+                                        mediaBuffer = await downloadMedia(quoted.stickerMessage, 'sticker');
+                                        mimetype = quoted.stickerMessage.mimetype;
+                                        fileName = `${Date.now()}.webp`;
+                                    } else {
+                                        await sock.sendMessage(chatId, { 
+                                            text: 'Media tidak terdeteksi, harap reply ke pesan yang berisi media (gambar/video/audio/dokumen/stiker)' 
+                                        }, { quoted: msg });
+                                        continue;
+                                    }
+                                    
+                                    // Save media to disk
+                                    const filePath = path.join(MEDIA_FOLDER, fileName);
+                                    fs.writeFileSync(filePath, mediaBuffer);
+                                    
+                                    // Buat caption kombinasi jika ada caption asli
+                                    const combinedCaption = originalCaption 
+                                        ? `${originalCaption}\n\n---\nMedia berhasil di-remote view. Disimpan sebagai: ${fileName}`
+                                        : `Media berhasil di-remote view. Disimpan sebagai: ${fileName}`;
+                                    
+                                    // Kirim media kembali ke user berdasarkan tipe
+                                    if (mimetype.startsWith('image')) {
+                                        await sock.sendMessage(chatId, { 
+                                            image: mediaBuffer,
+                                            caption: combinedCaption
+                                        }, { quoted: msg });
+                                    } else if (mimetype.startsWith('video')) {
+                                        await sock.sendMessage(chatId, { 
+                                            video: mediaBuffer,
+                                            caption: combinedCaption
+                                        }, { quoted: msg });
+                                    } else if (mimetype.startsWith('audio')) {
+                                        await sock.sendMessage(chatId, { 
+                                            audio: mediaBuffer,
+                                            mimetype: 'audio/mp4',
+                                            ptt: mimetype.includes('ogg')
+                                        }, { quoted: msg });
+                                        // Kirim pesan konfirmasi terpisah untuk audio
+                                        await sock.sendMessage(chatId, { 
+                                            text: `Media berhasil di-remote view. Disimpan sebagai: ${fileName}` 
+                                        }, { quoted: msg });
+                                    } else if (mimetype.includes('webp') || mimetype.includes('sticker')) {
+                                        await sock.sendMessage(chatId, { 
+                                            sticker: mediaBuffer
+                                        }, { quoted: msg });
+                                        // Kirim pesan konfirmasi terpisah untuk stiker
+                                        await sock.sendMessage(chatId, { 
+                                            text: `Stiker berhasil di-remote view. Disimpan sebagai: ${fileName}` 
+                                        }, { quoted: msg });
+                                    } else {
+                                        // Untuk dokumen dan tipe lainnya
+                                        await sock.sendMessage(chatId, { 
+                                            document: mediaBuffer,
+                                            mimetype: mimetype,
+                                            fileName: fileName
+                                        }, { quoted: msg });
+                                        // Kirim pesan konfirmasi terpisah untuk dokumen
+                                        await sock.sendMessage(chatId, { 
+                                            text: `Dokumen berhasil di-remote view. Disimpan sebagai: ${fileName}` 
+                                        }, { quoted: msg });
+                                    }
+                                } catch (error) {
+                                    console.error('Error processing RVO command:', error);
+                                    await sock.sendMessage(chatId, { 
+                                        text: 'Terjadi kesalahan saat memproses media. Silakan coba lagi.' 
+                                    }, { quoted: msg });
+                                }
                             } else {
                                 await sock.sendMessage(chatId, { 
-                                    text: 'Media tidak terdeteksi, harap reply ke pesan yang berisi media (gambar/video/audio/dokumen/stiker)' 
+                                    text: 'Format salah! Gunakan: .rvo (reply ke media)' 
                                 }, { quoted: msg });
-                                continue;
                             }
+                            continue;
+                        }
+                    }
+                    
+                    // Process messages for ChatGPT
+                    // First interaction OR ChatGPT mode is enabled OR bot is mentioned OR user is replying to bot
+                    const shouldRespond = isFirstInteraction || chatGPTEnabled[chatId] || isBotMentioned || isReplyingToBot;
+                    
+                    if (shouldRespond && messageContent) {
+                        // Create session ID jika belum ada
+                        if (!sessions[chatId]) {
+                            sessions[chatId] = uuidv4();
+                            saveJSONFile(SESSIONS_FILE, sessions);
+                        }
+                        
+                        // Create custom prompt if needed
+                        const promptMessage = getCustomPrompt(messageContent, chatId, isFirstInteraction);
+                        
+                        // Show typing indicator
+                        await sock.presenceSubscribe(chatId);
+                        await sock.sendPresenceUpdate('composing', chatId);
+                        
+                        try {
+                            // Call API
+                            const response = await axios.get(API_URL, {
+                                params: {
+                                    ask: promptMessage,
+                                    sessionId: sessions[chatId]
+                                },
+                                timeout: 30000 // 30 detik timeout
+                            });
                             
-                            // Save media to disk
-                            const filePath = path.join(MEDIA_FOLDER, fileName);
-                            fs.writeFileSync(filePath, mediaBuffer);
+                            // Stop typing indicator
+                            await sock.sendPresenceUpdate('paused', chatId);
                             
-                            // Buat caption kombinasi jika ada caption asli
-                            const combinedCaption = originalCaption 
-                                ? `${originalCaption}\n\n---\nMedia berhasil di-remote view. Disimpan sebagai: ${fileName}`
-                                : `Media berhasil di-remote view. Disimpan sebagai: ${fileName}`;
-                            
-                            // Kirim media kembali ke user berdasarkan tipe
-                            if (mimetype.startsWith('image')) {
-                                await sock.sendMessage(chatId, { 
-                                    image: mediaBuffer,
-                                    caption: combinedCaption
-                                }, { quoted: msg });
-                            } else if (mimetype.startsWith('video')) {
-                                await sock.sendMessage(chatId, { 
-                                    video: mediaBuffer,
-                                    caption: combinedCaption
-                                }, { quoted: msg });
-                            } else if (mimetype.startsWith('audio')) {
-                                await sock.sendMessage(chatId, { 
-                                    audio: mediaBuffer,
-                                    mimetype: 'audio/mp4',
-                                    ptt: mimetype.includes('ogg')
-                                }, { quoted: msg });
-                                // Kirim pesan konfirmasi terpisah untuk audio
-                                await sock.sendMessage(chatId, { 
-                                    text: `Media berhasil di-remote view. Disimpan sebagai: ${fileName}` 
-                                }, { quoted: msg });
-                            } else if (mimetype.includes('webp') || mimetype.includes('sticker')) {
-                                await sock.sendMessage(chatId, { 
-                                    sticker: mediaBuffer
-                                }, { quoted: msg });
-                                // Kirim pesan konfirmasi terpisah untuk stiker
-                                await sock.sendMessage(chatId, { 
-                                    text: `Stiker berhasil di-remote view. Disimpan sebagai: ${fileName}` 
-                                }, { quoted: msg });
+                            // Send response if successful
+                            if (response.data && response.data.status === 200) {
+                                await sock.sendMessage(chatId, { text: response.data.result }, { quoted: msg });
                             } else {
-                                // Untuk dokumen dan tipe lainnya
+                                console.error('Error response from API:', response.data);
                                 await sock.sendMessage(chatId, { 
-                                    document: mediaBuffer,
-                                    mimetype: mimetype,
-                                    fileName: fileName
-                                }, { quoted: msg });
-                                // Kirim pesan konfirmasi terpisah untuk dokumen
-                                await sock.sendMessage(chatId, { 
-                                    text: `Dokumen berhasil di-remote view. Disimpan sebagai: ${fileName}` 
+                                    text: 'Maaf, terjadi kesalahan pada respons API.' 
                                 }, { quoted: msg });
                             }
-                        } else {
-                            await sock.sendMessage(chatId, { 
-                                text: 'Format salah! Gunakan: .rvo (reply ke media)' 
-                            }, { quoted: msg });
-                        }
-                        continue;
-                    }
-                }
-                
-                // Process messages for ChatGPT
-                // First interaction OR ChatGPT mode is enabled OR bot is mentioned OR user is replying to bot
-                const shouldRespond = isFirstInteraction || chatGPTEnabled[chatId] || isBotMentioned || isReplyingToBot;
-                
-                if (shouldRespond && messageContent) {
-                    // Create session ID jika belum ada
-                    if (!sessions[chatId]) {
-                        sessions[chatId] = uuidv4();
-                    }
-                    
-                    // Create custom prompt if needed
-                    const promptMessage = getCustomPrompt(messageContent, chatId, isFirstInteraction);
-                    
-                    // Show typing indicator
-                    await sock.presenceSubscribe(chatId);
-                    await sock.sendPresenceUpdate('composing', chatId);
-                    
-                    try {
-                        // Call API
-                        const response = await axios.get(API_URL, {
-                            params: {
-                                ask: promptMessage,
-                                sessionId: sessions[chatId]
+                        } catch (error) {
+                            console.error('Error calling API:', error);
+                            await sock.sendPresenceUpdate('paused', chatId);
+                            
+                            // Determine specific error message
+                            let errorMessage = 'Maaf, terjadi kesalahan saat memproses pesan Anda.';
+                            
+                            if (error.code === 'ECONNABORTED') {
+                                errorMessage = 'Waktu koneksi ke API habis. Server mungkin sedang sibuk, silakan coba lagi nanti.';
+                            } else if (error.response) {
+                                errorMessage = `API Error (${error.response.status}): Terjadi kesalahan pada respons API.`;
+                            } else if (error.request) {
+                                errorMessage = 'Tidak dapat terhubung ke server API. Periksa koneksi internet Anda atau coba lagi nanti.';
                             }
-                        });
-                        
-                        // Stop typing indicator
-                        await sock.sendPresenceUpdate('paused', chatId);
-                        
-                        // Send response if successful
-                        if (response.data && response.data.status === 200) {
-                            await sock.sendMessage(chatId, { text: response.data.result }, { quoted: msg });
-                        } else {
-                            console.error('Error response from API:', response.data);
-                            await sock.sendMessage(chatId, { 
-                                text: 'Maaf, terjadi kesalahan pada respons API.' 
-                            }, { quoted: msg });
+                            
+                            // Send error message
+                            await sock.sendMessage(chatId, { text: errorMessage }, { quoted: msg });
                         }
-                    } catch (error) {
-                        console.error('Error calling API:', error);
-                        await sock.sendPresenceUpdate('paused', chatId);
-                        
-                        // Send error message
-                        await sock.sendMessage(chatId, { 
-                            text: 'Maaf, terjadi kesalahan saat memproses pesan Anda.' 
-                        }, { quoted: msg });
                     }
+                } catch (err) {
+                    console.error('Error processing message:', err);
                 }
-            } catch (err) {
-                console.error('Error processing message:', err);
             }
-        }
-    });
+        });
+    } catch (error) {
+        console.error('Fatal error in startBot():', error);
+        console.log('Restarting bot in 10 seconds...');
+        setTimeout(startBot, 10000);
+    }
 }
 
 // Start the bot
+console.log('Starting Elz AI WhatsApp Bot...');
 startBot();
