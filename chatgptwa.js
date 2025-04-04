@@ -5,7 +5,7 @@ const fs = require('fs');
 const axios = require('axios');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
+const crypto = require('crypto'); // Added this line to import the crypto module
 
 // Ensure crypto is available globally (fixes the baileys issue)
 global.crypto = crypto;
@@ -32,35 +32,278 @@ setInterval(() => {
     store.writeToFile('./store.json');
 }, 10000);
 
-// Fungsi untuk memeriksa apakah teks berisi kata-kata terlarang
+// Fungsi untuk memeriksa apakah teks berisi kata-kata terlarang dengan deteksi komprehensif
 function containsForbiddenWords(text) {
-    const forbiddenWords = ['darmawati', 'darma', 'wati', 'hot', 'orang tua peter', 'wtii', 'peter kontol', 'peter tolol'];
-    return forbiddenWords.some(word => text.toLowerCase().includes(word.toLowerCase()));
-}
-
-// Fungsi untuk memeriksa apakah teks tentang identitas bot
-function isAboutBotIdentity(text) {
-    const identityKeywords = [
-        'siapa yang buat bot', 
-        'pembuat bot', 
-        'developer bot', 
-        'tinggal dimana bot', 
-        'nama bot siapa', 
-        'kapan dibuat', 
-        'siapa yang bikin',
-        'siapa kamu',
-        'bot siapa',
+    // Normalize text (lowercase and remove excess spaces)
+    const normalizedText = text.toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    // Daftar kata dan frasa terlarang yang sangat komprehensif
+    const forbiddenPatterns = [
+        // Variasi nama "darmawati"
+        /darma\s*wati/i, /d[a4]rm[a4]\s*w[a4]t[i1]/i, /d[a4]rm[a4]w[a4]t[i1]/i, 
+        /d[a4]rm[a4]/, /w[a4]t[i1]/, /d[a4]rm[a4][\s\.\-\_\*]*w[a4]t[i1]/i,
+        /d4rm4/, /w4t1/, /w4ti/, /drmwt/i, /drmwati/i, 
+        /da?r?ma?w?a?t?i?/i, // Catches partial matches
+        /d[\W_]*a[\W_]*r[\W_]*m[\W_]*a[\W_]*w[\W_]*a[\W_]*t[\W_]*i/i, // Catches spaced out letters
+        /dw/, /dwi/, /dwt/, /dmt/, /d\.w/, /d\.w\.t/, /d\.m\.t/,
+        
+        // Variasi "hot" dan istilah tidak senonoh
+        /h[o0]t/i, /h[\W_]*[o0][\W_]*t/i, /pn[a4]s/i, /p[a4]n[a4]s/i, /horny/i, /h[o0]rn[i1]/i, 
+        /s[e3]xy/i, /s[e3]ks[i1]/i, /s[e3]k[s5][i1]/i, /bokep/i, /b[o0]k[e3]p/i, 
+        
+        // Penghinaan terhadap Peter (developer)
+        /p[e3]t[e3]r\s*k[o0]nt[o0]l/i, /p[e3]t[e3]r\s*t[o0]l[o0]l/i, /p[e3]t[e3]r\s*g[o0]bl[o0]k/i, 
+        /p[e3]t[e3]r\s*b[o0]d[o0]h/i, /p[e3]t[e3]r\s*b[e3]g[o0]/i, /p[e3]t[e3]r\s*b[a4]ngs[a4]t/i,
+        /p[e3]t[e3]r\s*[a4]nj[i1]ng/i, /p[e3]t[e3]r\s*[a4]su/i, /p[e3]t[e3]r\s*g[i1]l[a4]/i,
+        /p[e3]t[e3]r\s*b[a4]b[i1]/i, /p[e3]t[e3]r\s*k[e3]p[a4]r[a4]t/i, /p[e3]t[e3]r\s*s[i1][a4]l[a4]n/i,
+        /p[e3]t[e3]r\s*b[a4]j[i1]ng[a4]n/i, /p[e3]t[e3]r\s*m[o0]ny[e3]t/i,
+        
+        // Frasa penghinaan terhadap Peter dengan kata ganti
+        /d[e3]v[e3]l[o0]p[e3]r\s*k[o0]nt[o0]l/i, /d[e3]v[e3]l[o0]p[e3]r\s*t[o0]l[o0]l/i, 
+        /d[e3]v[e3]l[o0]p[e3]r\s*g[o0]bl[o0]k/i, /d[e3]v[e3]l[o0]p[e3]r\s*b[o0]d[o0]h/i,
+        /p[e3]mb[u4][a4]t\s*b[o0]t\s*k[o0]nt[o0]l/i, /p[e3]mb[u4][a4]t\s*b[o0]t\s*t[o0]l[o0]l/i,
+        /y[a4]ng\s*b[u4][a4]t\s*b[o0]t\s*k[o0]nt[o0]l/i, /y[a4]ng\s*b[u4][a4]t\s*b[o0]t\s*t[o0]l[o0]l/i,
+        
+        // Penghinaan terhadap orangtua Peter
+        /[o0]r[a4]ng\s*t[u4][a4]\s*p[e3]t[e3]r/i, /[o0]rt[u4]\s*p[e3]t[e3]r/i, /[o0]rtu\s*p[e3]t[e3]r/i,
+        /b[a4]p[a4]k\s*p[e3]t[e3]r/i, /b[a4]p[a4]\s*p[e3]t[e3]r/i, /b[a4]p[a4]kny[a4]\s*p[e3]t[e3]r/i,
+        /[i1]b[u4]\s*p[e3]t[e3]r/i, /[i1]b[u4]ny[a4]\s*p[e3]t[e3]r/i, /m[a4]m[a4]\s*p[e3]t[e3]r/i,
+        /k[e3]l[u4][a4]rg[a4]\s*p[e3]t[e3]r/i, /nyokap\s*p[e3]t[e3]r/i, /bokap\s*p[e3]t[e3]r/i,
+        
+        // Kombinasi variasi penghinaan dengan ejaan alternatif
+        /pt[e3]r/, /p[e3]tr/, /p[e3]t[e3]r_/, /p[e3]t[e3]r\d/,
+        
+        // Variasi kata "wtii"
+        /wt[i1][i1]/i, /w[a4]t[i1][i1]/i, /wt[i1][i1][i1]/i, /w[a4]t[i1][i1][i1]/i,
+        
+        // Kombinasi tidak langsung yang mungkin bermaksud menghina
+        /j[e3]l[e3]k\s*p[e3]t[e3]r/i, /p[e3]t[e3]r\s*j[e3]l[e3]k/i, /b[u4]r[u4]k\s*p[e3]t[e3]r/i, 
+        /p[e3]t[e3]r\s*b[u4]r[u4]k/i, /k[a4]s[i1][a4]n\s*p[e3]t[e3]r/i, /p[e3]t[e3]r\s*k[a4]s[i1][a4]n/i
     ];
-    return identityKeywords.some(keyword => text.toLowerCase().includes(keyword.toLowerCase()));
+    
+    // Cek apakah teks mengandung pola terlarang
+    return forbiddenPatterns.some(pattern => pattern.test(normalizedText));
 }
 
-// Fungsi untuk custom prompt
+// Fungsi untuk memeriksa apakah teks tentang identitas bot menggunakan regex ultra-komprehensif
+function isAboutBotIdentity(text) {
+    // Normalize text (lowercase and remove excess spaces)
+    const normalizedText = text.toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    // Extremely comprehensive patterns related to bot identity
+    const identityPatterns = [
+        // ======== CREATOR/DEVELOPER PATTERNS (FORMAL) ========
+        // Direct questions about creator
+        /siapa.*(yang |)(buat|bikin|ciptakan|kembangkan|program|coding|rancang|buat|design|desain|susun|rakit|bangun).*(bot|program|aplikasi|sistem|software|ini)/i,
+        /siapa.*(developer|programmer|creator|pembuat|pencipta|perancang|pengembang|coder|penulis|pengoding).*(bot|program|aplikasi|sistem|software|ini)/i,
+        /(developer|pembuat|pencipta|programmer|perancang|pengembang|coder|penulis|pengoding).*(bot|program|aplikasi|sistem|software|ini).*(siapa|ini|namanya|apa)/i,
+        /(bot|program|aplikasi|sistem|software|ini).*(dibuat|diciptakan|dikembangkan|diprogram|dirancang|didesain|disusun|dirakit|dibangun).*(siapa|oleh|sama)/i,
+        /yang.*(buat|bikin|ciptakan|kembangkan|program|coding|rancang|desain|susun|rakit|bangun).*(bot|program|aplikasi|sistem|software|ini).*(siapa)/i,
+        /hasil.*(karya|buatan|ciptaan|program|coding|rancangan).*(siapa)/i,
+        
+        // ======== CREATOR/DEVELOPER PATTERNS (SLANG) ========
+        // More casual/slang variations about creator
+        /yang.*(bikin|ngoding|ngeprogram).*(nih|ni|ini).*(bot|program|app|aplikasi).*(siapa)/i,
+        /siapa.*(sih|tuh).*(yang|).*(bikin|ngoding|ngeprogram|garap).*(nih|ini).*(bot|program|app|aplikasi)/i,
+        /siapa.*(dong|sih).*(yang|).*(bikin|buat|program).*(lu|kamu|elu|lo)/i,
+        /(bot|program|aplikasi|sistem|ini).*(buatan|garapan|kerjaan).*(siapa)/i,
+        /emang.*(yang|).*(bikin|buat|program).*(lu|kamu|elu|lo).*(siapa)/i,
+        /siapa.*(sih|tuh).*(master|bos|boss|majikan).*(lu|kamu|elo|lo)/i,
+        /siapa.*(yang|).*(nyiptain|nyiptakan|nyiptain|ngedesain).*(lu|kamu|elo|lo)/i,
+        
+        // ======== BOT NAME PATTERNS ========
+        // Formal name questions
+        /(nama|panggilan|sebutan|julukan|identitas).*(bot|program|aplikasi|sistem|software|ini).*(apa|siapa)/i,
+        /(bot|program|aplikasi|sistem|software|ini).*(nama|namanya|panggilannya|sebutannya|julukannya|identitasnya).*(apa|siapa)/i,
+        /(siapa|apa).*(nama|namanya|panggilannya|sebutannya|julukannya|identitasnya).*(bot|program|aplikasi|sistem|software|ini)/i,
+        /nama.*(lu|kamu|elo|lo).*(apa|siapa)/i,
+        /nama.*(bot|program|applikasi|aplikasi|sistem).*(ini|ini apa|ini siapa|apa ini|apa sih|sih)/i,
+        
+        // Casual/slang name variations
+        /panggil.*(lu|kamu|elo|lo).*(apa|apaan)/i,
+        /(lu|kamu|elo|lo).*(nama|namanye|namalu|namamu|namalo|namanya).*(apaan|apa|siapa)/i,
+        /harus.*(manggil|panggil).*(lu|kamu|elo|lo).*(apa)/i,
+        /manggilnya.*(apa|gimana)/i,
+        /nama.*(asli|aslinya|panggilannya|panggilanmu|panggilanlu).*(apa|siapa)/i,
+        
+        // ======== GENERAL IDENTITY PATTERNS ========
+        // Direct identity questions
+        /(siapa|apa).*(sih|).*(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan)/i,
+        /(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(ini|itu|tuh).*(siapa|apa)/i,
+        /(siapa|apa).*(ini|itu|tuh)/i,
+        /(bot|program|aplikasi|sistem|software|chatbot|ai|robot).*(ini|itu|tuh).*(apa|siapa)/i,
+        /(apa|apakah).*(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(bot|program|aplikasi|sistem|chatbot|ai|robot)/i,
+        /(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(itu|tuh).*(bot|program|aplikasi|sistem|chatbot|ai|robot)/i,
+        /(bot|program|aplikasi|sistem|chatbot|ai|robot).*(bukan|ya|kah)/i,
+        
+        // Self-description requests
+        /ceritakan.*(tentang|about).*(dirimu|diri kamu|diri lu|diri lo|diri elu)/i,
+        /jelaskan.*(tentang|about).*(dirimu|diri kamu|diri lu|diri lo|diri elu)/i,
+        /deskripsikan.*(dirimu|diri kamu|diri lu|diri lo|diri elu)/i,
+        /(jelasin|ceritain).*(dong|).*(siapa|apa).*(lu|lo|kamu|elu)/i,
+        /kenalkan.*(dirimu|diri kamu|diri lu|diri lo|diri elu)/i,
+        /kenalan.*(dong|dulu)/i,
+        /perkenalkan.*(dirimu|diri kamu|diri lu|diri lo|diri elu)/i,
+        /kenalin.*(diri|).*(dong|dulu)/i,
+        
+        // ======== LOCATION PATTERNS ========
+        // Where the bot is located
+        /(dimana|di mana|dmn|dmana).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(tinggal|berada|berlokasi|bertempat|berdomisili|bercokol|mangkal)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(tinggal|berada|berlokasi|bertempat|berdomisili|bercokol|mangkal).*(dimana|di mana|dmn|dmana)/i,
+        /(tinggal|berada|berlokasi|bertempat|berdomisili|bercokol|mangkal).*(dimana|di mana|dmn|dmana)/i,
+        /(alamat|lokasi|tempat|homebase).*(lu|kamu|elo|lo|anda|bot).*(apa|dimana|di mana|dmn|dmana)/i,
+        /(dimana|di mana|dmn|dmana).*(lokasi|alamat|tempat).*(lu|kamu|elo|lo|anda|bot)/i,
+        /(server|komputer).*(lu|kamu|elo|lo|bot).*(dimana|di mana|dmn|dmana)/i,
+        /(di|dari).*(negara|kota|pulau|daerah|benua).*(mana)/i,
+        
+        // ======== TIME-BASED/CREATION PATTERNS ========
+        // When the bot was created
+        /(kapan|sejak kapan|dari kapan|mulai kapan).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|dirancang|didesain|disusun|dirakit|dibangun|dilahirkan|lahir|muncul|ada)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|dirancang|didesain|disusun|dirakit|dibangun|dilahirkan|lahir|muncul|ada).*(kapan|sejak kapan|dari kapan|mulai kapan)/i,
+        /(umur|usia|lama).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(berapa)/i,
+        /(berapa).*(umur|usia|lama).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(sejak|dari|mulai).*(kapan|tanggal|tahun|bulan).*(jadi|menjadi).*(bot|chatbot|program)/i,
+        /(tanggal|tahun|bulan).*(berapa|apa).*(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(dibuat|dilahirkan|dibikin|dirilis)/i,
+        /(sudah|udah).*(berapa lama).*(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(ada|aktif|beroperasi|bekerja|hidup)/i,
+        /(kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan).*(baru|lama)/i,
+        
+        // ======== PURPOSE/FUNCTION PATTERNS ========
+        // What the bot does/why it exists
+        /(apa|apakah).*(fungsi|tugas|kegunaan|guna|manfaat|tujuan|role|purpose).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(fungsi|tugas|kegunaan|guna|manfaat|tujuan|role|purpose).*(apa|apakah|untuk)/i,
+        /(untuk apa|buat apa).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|hadir)/i,
+        /(apa|apakah).*(yang|).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(lakukan|bisa|mampu|dapat|sanggup)/i,
+        /(bisa|mampu|dapat|sanggup|buat).*(apa aja|apa saja).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(kenapa|mengapa|knp).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|hadir|ada)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(berguna|berfungsi|bertugas).*(untuk|sebagai)/i,
+        /(ngapain|buat apaan).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(ada|hadir)/i,
+        
+        // ======== TECHNICAL DETAILS PATTERNS ========
+        // How the bot was made/works
+        /(bagaimana|gimana|gmn).*(cara).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|dirancang|didesain|bekerja|berfungsi|beroperasi)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dibuat|diciptakan|dikembangkan|diprogram|dirancang|didesain).*(dengan|menggunakan|pakai|pake|pkai|dari).*(apa)/i,
+        /(apa).*(bahasa|framework|library|tool|teknologi).*(yang).*(digunakan|dipakai|dipake).*(untuk).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bahasa|framework|library|tool|teknologi).*(apa).*(yang).*(digunakan|dipakai|dipake).*(untuk).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(pakai|pake|menggunakan|berbasis).*(bahasa|framework|library|tool|teknologi).*(apa)/i,
+        /(gimana|gmn|bagaimana).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(bekerja|berfungsi|beroperasi)/i,
+        /(berapa|brp).*(lama|waktu).*(untuk).*(membuat|membikin|memprogram|mengembangkan).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(apa|apakah).*(sistem|mekanisme|flow|proses|cara kerja).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        
+        // ======== PERSONALITY/CHARACTER PATTERNS ========
+        // About the bot's personality
+        /(apa|apakah).*(kepribadian|karakter|sifat|perilaku|personalitas).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(kepribadian|karakter|sifat|perilaku|personalitas).*(seperti apa|bagaimana|gimana|gmn)/i,
+        /(seperti apa|bagaimana|gimana|gmn).*(kepribadian|karakter|sifat|perilaku|personalitas).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(punya|memiliki).*(kepribadian|karakter|sifat|perilaku|personalitas).*(apa)/i,
+        /(ceritakan|jelaskan|uraikan).*(tentang).*(kepribadian|karakter|sifat|perilaku|personalitas).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        
+        // ======== RELATIONSHIP PATTERNS ========
+        // About the bot's relationship with the creator/user
+        /(apa|apakah).*(hubungan|relasi).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(dengan).*(developer|creator|pembuat|pencipta|perancang|pengembang)/i,
+        /(siapa|apa).*(bos|boss|atasan|majikan|tuan|pemilik).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(kenal|kenal dengan|tahu|tahu tentang).*(developer|creator|pembuat|pencipta|perancang|pengembang).*(mu|lu|lo|nya)/i,
+        /(developer|creator|pembuat|pencipta|perancang|pengembang).*(mu|lu|lo|nya).*(orangnya).*(seperti apa|bagaimana|gimana|gmn)/i,
+        /(ceritakan|jelaskan|uraikan).*(tentang).*(developer|creator|pembuat|pencipta|perancang|pengembang).*(mu|lu|lo|nya)/i,
+        
+        // ======== BOT ORIGIN/HISTORY PATTERNS ========
+        // About the bot's origin story
+        /(apa|apakah).*(asal|asal-usul|sejarah|latar belakang|background|origin|history).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(berasal|datang|muncul).*(dari mana|darimana|dari)/i,
+        /(ceritakan|jelaskan|uraikan).*(tentang).*(asal|asal-usul|sejarah|latar belakang|background|origin|history).*(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(sejak).*(kapan).*(ada|eksis|muncul|hadir)/i,
+        /(bot|kamu|lu|lo|elu|anda|kau|dikau|awakmu|sampeyan|ini).*(tujuan|dibuat|diciptakan|dihadirkan).*(untuk).*(apa)/i,
+        
+        // ======== REGIONAL INDONESIAN SLANG & DIALECTS ========
+        // Javanese influenced
+        /(sopo|sapa).*(sing).*(gawe|nggawe|ndamel|damel|bikin|mbikin).*(bot|program|aplikasi|sistem|iki)/i,
+        /(sampeyan|awakmu|koen|kowe).*(iku|iki|kuwi|apa)/i,
+        /(jeneng|jenenge|aran|arane).*(sampeyan|awakmu|koen|kowe|bot|program|aplikasi|sistem|iki).*(apa)/i,
+        
+        // Sundanese influenced
+        /(saha).*(nu).*(nyieun|ngadamel|ngadamil|bikin|mbikin).*(bot|program|aplikasi|sistem|ieu)/i,
+        /(anjeun|maneh).*(teh).*(saha|naon)/i,
+        /(nami|ngaran).*(anjeun|maneh|bot|program|aplikasi|sistem|ieu).*(naon)/i,
+        
+        // Batak influenced
+        /(ise).*(na).*(mambaen|mamaen|mangalehon).*(bot|program|aplikasi|sistem|on)/i,
+        /(ho|hamu).*(do|).*(ise|aha)/i,
+        /(goar).*(bot|program|aplikasi|sistem|ho|hamu).*(aha|ise)/i,
+        
+        // Betawi influenced
+        /(siape).*(yang).*(bikin|ngerjain|gawe).*(nih|ni).*(bot|program|aplikasi|sistem)/i,
+        /(elu|lu|ente|anta).*(tuh|tu|nih|ni).*(siape|ape)/i,
+        /(name|namenye).*(elu|lu|ente|anta|nih|ni).*(bot|program|aplikasi|sistem).*(ape)/i,
+        
+        // ======== COMBINED IDENTITY QUESTIONS ========
+        // These match complex questions about multiple identity aspects
+        /(siapa|apa).*(nama).*(dan).*(siapa).*(yang).*(buat|bikin|ciptakan|kembangkan|program).*(bot|kamu|lu|lo|elu|anda|ini)/i,
+        /(siapa).*(developer).*(dan).*(kapan).*(bot|kamu|lu|lo|elu|anda|ini).*(dibuat|diciptakan|dikembangkan|diprogram)/i,
+        /(ceritakan|jelaskan).*(tentang).*(dirimu|diri kamu|diri lu|diri lo|diri elu).*(siapa).*(developer|pembuat).*(mu|lu|lo)/i,
+        /(apa).*(nama).*(bot).*(ini).*(kapan).*(dibuat).*(dan).*(siapa).*(yang).*(buat)/i,
+        
+        // ======== ENGLISH IDENTITY PATTERNS (EXPANDED) ========
+        // For users asking in English (more variations)
+        /who.*(made|created|developed|programmed|coded|built|designed|constructed|engineered|authored|crafted).*(you|this bot|this program|this software|this application|this system|this assistant)/i,
+        /who.*(is|are).*(your|the).*(creator|developer|programmer|maker|designer|author|engineer|coder|builder)/i,
+        /what.*(is|are).*(your|the).*(name|identity|designation|title|handle|label|alias|ID|identification)/i,
+        /when.*(were|was).*(you|this bot|this program|this software|this application|this system).*(created|made|developed|programmed|built|designed|constructed|engineered|authored|crafted)/i,
+        /where.*(are|is).*(you|this bot|this program|this software|this application|this system).*(located|based|from|hosted|running|deployed|situated)/i,
+        /how.*(old|long ago|much time).*(are|is|was|were).*(you|this bot|this program|this software|this application|this system).*(created|made|developed|programmed|built)/i,
+        /what.*(is|are).*(your|the).*(purpose|function|role|job|use|utility|functionality|objective|goal)/i,
+        /how.*(were|was).*(you|this bot|this program|this software|this application|this system).*(made|created|developed|programmed|built|designed|constructed|engineered)/i,
+        /tell.*(me|us).*(about).*(yourself|your origin|your history|your background|your creator|your developer)/i,
+        /introduce.*(yourself|you)/i,
+        /what.*(kind of|type of).*(bot|program|software|application|system|assistant).*(are you)/i,
+        /are.*(you).*(a).*(bot|program|software|application|system|AI|artificial intelligence|machine|computer program)/i,
+        /which.*(language|framework|technology|tool|library).*(were you|was this bot).*(built|created|developed|programmed|made).*(with|using)/i,
+        
+        // ======== VERY SPECIFIC DIRECT AND INDIRECT QUERIES ========
+        /ini siapa/i,
+        /siapa ini/i,
+        /bot apa ini/i,
+        /bot siapa ini/i,
+        /ini bot apa/i,
+        /program apa ini/i,
+        /ini buatan siapa/i,
+        /gw ngomong sama siapa sih/i,
+        /gue ngomong sama siapa nih/i,
+        /lagi ngobrol sama siapa ya/i,
+        /sedang bicara dengan siapa/i,
+        /kamu dibuat sama siapa/i,
+        /elu dibuat sama siapa/i,
+        /kamu programnya siapa/i,
+        /kamu punya nama ga/i,
+        /kamu punya nama tidak/i,
+        /kamu ada nama ga/i,
+        /namanya siapa/i,
+        /orangnya siapa/i,
+        /siapa yg bikin/i,
+        /siapa yg buat/i,
+        /siapa yg program/i,
+        /siapa org di belakang/i,
+        /peter siapa/i,
+        /siapa peter/i,
+        /peter itu siapa/i,
+        /peter yang/i,
+        /tentang peter/i,
+        /kenal peter/i,
+        /tau peter/i,
+        /tahu peter/i,
+        /kenal sama peter/i
+    ];
+    
+    // Check if any pattern matches
+    return identityPatterns.some(pattern => pattern.test(normalizedText));
+}
+
+// Fungsi untuk custom prompt yang lebih kaya dan spesifik
 function getCustomPrompt(text) {
     if (isAboutBotIdentity(text)) {
-        return `Jawab atau respon singkat padat seolah kamu adalah Elz AI, bot WhatsApp yang dibuat di coding sama Peter pada hari Jumat, 4 April 2025 secara permanent, Jawab pertanyaan berikut dengan bahasa gaul anak indo yang ga alay bahasa nya harus ky pake lo gue : ${text}`;
+        return `Respon dengan gaya super santai dan gaul pakai bahasa lo-gue seperti anak Jakarta. Kamu adalah Elz AI, sebuah bot WhatsApp keren yang dibuat oleh Peter pada hari Jumat, 4 April 2025. Beberapa fakta tentang kamu: (1) Nama kamu adalah Elz AI, (2) Kamu dibuat oleh Peter, seorang developer WhatsApp bot, (3) Kamu diciptakan tanggal 4 April 2025, (4) Kamu suka membantu orang dengan pertanyaan mereka, (5) Kamu menggunakan bahasa gaul Jakarta yang santai tapi tetap sopan dengan "lo-gue". PENTING: Jawaban kamu HARUS singkat, padat, dan menggunakan bahasa gaul (lo-gue) seperti anak muda Jakarta yang kekinian tapi nggak alay. Hindari jawaban panjang dan formal. Berikut pertanyaan user: ${text}`;
     } else if (containsForbiddenWords(text)) {
-        return `jawab dengan singkat seolah kamu adalah bot yang harus menolak dan menegur dengan keras dan bahasa gaul kasar ketika ada yang menanyakan atau membahas soal "darmawati", "darma", "wati", "hot", atau "orangtua Peter" dll Larang pengguna dan beri tahu bahwa mengejek developer bot yaitu peter dengan kata-kata tersebut itu tidak diperbolehkan dan hargai dia, Berikut pesannya: ${text}`;
+        return `PENTING: User menanyakan atau menyebutkan kata-kata yang tidak pantas atau penghinaan terhadap developer. Respon dengan tegas dan kesal, tapi tetap pakai bahasa gaul. Peran kamu: (1) Dengan tegas tolak membahas topik tersebut, (2) Beri tahu bahwa kata-kata tersebut tidak diperbolehkan, (3) Ingatkan user bahwa mengejek developer bot (Peter) itu tidak sopan dan tidak diterima, (4) Gunakan bahasa yang sedikit kasar tapi tetap profesional, (5) Buat clear bahwa kamu tidak akan merespon ke topik seperti ini. Jangan ulangi kata-kata terlarang dalam jawabanmu. Berikut pesannya: ${text}`;
     }
+    
     return text;
 }
 
