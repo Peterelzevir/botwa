@@ -483,16 +483,16 @@ async function startBot() {
                                 await sock.sendMessage(chatId, { text: 'Session telah direset!' }, { quoted: msg });
                             }
                             continue;
-                        } else if (command === 'chatgpt') {
+                        } else if (command === 'pet') {
                             const param = messageContent.slice(8).trim().toLowerCase();
                             if (param === 'on') {
                                 chatGPTEnabled[chatId] = true;
                                 saveJSONFile(CHAT_GPT_ENABLED_FILE, chatGPTEnabled);
-                                await sock.sendMessage(chatId, { text: 'ChatGPT mode diaktifkan!' }, { quoted: msg });
+                                await sock.sendMessage(chatId, { text: 'Elz AI mode diaktifkan!' }, { quoted: msg });
                             } else if (param === 'off') {
                                 chatGPTEnabled[chatId] = false;
                                 saveJSONFile(CHAT_GPT_ENABLED_FILE, chatGPTEnabled);
-                                await sock.sendMessage(chatId, { text: 'ChatGPT mode dinonaktifkan!' }, { quoted: msg });
+                                await sock.sendMessage(chatId, { text: 'Elz AI mode dinonaktifkan!' }, { quoted: msg });
                             }
                             continue;
                         } else if (command === 'rvo') {
@@ -506,14 +506,14 @@ async function startBot() {
                                         p.id === msg.key.participant && ['admin', 'superadmin'].includes(p.admin)
                                     );
                                 } catch (error) {
-                                    console.error('Error checking admin status:', error);
+                                    console.error('error checking admin status:', error);
                                     isAdmin = false;
                                 }
                             }
                             
                             if (!isAdmin) {
                                 await sock.sendMessage(chatId, { 
-                                    text: 'Maaf, fitur RVO hanya bisa digunakan oleh admin!' 
+                                    text: 'sorry ye, ni fitur cuman bisa digunakan oleh admin sorry!' 
                                 }, { quoted: msg });
                                 continue;
                             }
@@ -561,8 +561,8 @@ async function startBot() {
                                     
                                     // Buat caption kombinasi jika ada caption asli
                                     const combinedCaption = originalCaption 
-                                        ? `${originalCaption}\n\n---\nMedia berhasil di-remote view. Disimpan sebagai: ${fileName}`
-                                        : `Media berhasil di-remote view. Disimpan sebagai: ${fileName}`;
+                                        ? `${originalCaption}\n\n---\nnih etmin gua simpan sebagai : ${fileName}`
+                                        : `nih etmin gua berhasil di-remote view, gua simpan sebagai : ${fileName}`;
                                     
                                     // Kirim media kembali ke user berdasarkan tipe
                                     if (mimetype.startsWith('image')) {
@@ -602,18 +602,18 @@ async function startBot() {
                                         }, { quoted: msg });
                                         // Kirim pesan konfirmasi terpisah untuk dokumen
                                         await sock.sendMessage(chatId, { 
-                                            text: `Dokumen berhasil di-remote view. Disimpan sebagai: ${fileName}` 
+                                            text: `dokumen berhasil di-remote view ni gua simpan sebagai : ${fileName}` 
                                         }, { quoted: msg });
                                     }
                                 } catch (error) {
                                     console.error('Error processing RVO command:', error);
                                     await sock.sendMessage(chatId, { 
-                                        text: 'Terjadi kesalahan saat memproses media. Silakan coba lagi.' 
+                                        text: 'terjadi kesalahan saat memproses media, silakan coba lagi' 
                                     }, { quoted: msg });
                                 }
                             } else {
                                 await sock.sendMessage(chatId, { 
-                                    text: 'Format salah! Gunakan: .rvo (reply ke media)' 
+                                    text: 'format salah! gunakan: .rvo (reply ke media)' 
                                 }, { quoted: msg });
                             }
                             continue;
