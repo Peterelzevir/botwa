@@ -588,10 +588,39 @@ async function startBot() {
                     if (fromMe) continue;
                     
                     // Get message context
-                    const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-                    const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                    const quotedParticipant = msg.message.extendedTextMessage?.contextInfo?.participant;
+                    let quoted = null;
+                    let mentioned = [];
+                    let quotedParticipant = null;
                     const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                    
+                    // Ekstrak contextInfo berdasarkan tipe pesan
+                    if (msg.message.extendedTextMessage?.contextInfo) {
+                        // Untuk pesan teks biasa dengan reply atau tag
+                        quoted = msg.message.extendedTextMessage.contextInfo.quotedMessage;
+                        mentioned = msg.message.extendedTextMessage.contextInfo.mentionedJid || [];
+                        quotedParticipant = msg.message.extendedTextMessage.contextInfo.participant;
+                    } else if (msg.message.imageMessage?.contextInfo) {
+                        // Untuk pesan gambar dengan reply atau tag
+                        quoted = msg.message.imageMessage.contextInfo.quotedMessage;
+                        mentioned = msg.message.imageMessage.contextInfo.mentionedJid || [];
+                        quotedParticipant = msg.message.imageMessage.contextInfo.participant;
+                    } else if (msg.message.videoMessage?.contextInfo) {
+                        // Untuk pesan video dengan reply atau tag
+                        quoted = msg.message.videoMessage.contextInfo.quotedMessage;
+                        mentioned = msg.message.videoMessage.contextInfo.mentionedJid || [];
+                        quotedParticipant = msg.message.videoMessage.contextInfo.participant;
+                    } else if (msg.message.documentMessage?.contextInfo) {
+                        // Untuk pesan dokumen dengan reply atau tag
+                        quoted = msg.message.documentMessage.contextInfo.quotedMessage;
+                        mentioned = msg.message.documentMessage.contextInfo.mentionedJid || [];
+                        quotedParticipant = msg.message.documentMessage.contextInfo.participant;
+                    } else if (msg.message.audioMessage?.contextInfo) {
+                        // Untuk pesan audio dengan reply atau tag
+                        quoted = msg.message.audioMessage.contextInfo.quotedMessage;
+                        mentioned = msg.message.audioMessage.contextInfo.mentionedJid || [];
+                        quotedParticipant = msg.message.audioMessage.contextInfo.participant;
+                    }
+                    
                     const isBotMentioned = mentioned.includes(botNumber);
                     const isReplyingToBot = quotedParticipant === botNumber;
                     const senderId = msg.key.participant || msg.key.remoteJid;
@@ -684,10 +713,14 @@ async function startBot() {
                                     if (videoResponse.status === 200) {
                                         const videoBuffer = Buffer.from(videoResponse.data);
                                         
+                                        // Send video in HD quality
                                         await sock.sendMessage(chatId, {
                                             video: videoBuffer,
                                             caption: caption,
-                                            gifPlayback: false
+                                            gifPlayback: false,
+                                            jpegThumbnail: null, // Disable thumbnail compression
+                                            viewOnce: false,
+                                            mediaUploadTimeoutMs: 90000, // Longer timeout for HD video upload
                                         }, { quoted: msg });
                                     } else {
                                         throw new Error('Failed to download video');
@@ -769,15 +802,23 @@ async function startBot() {
                                                     `Instagram Download`;
                                                 
                                                 if (isVideo) {
+                                                    // Send video in HD quality
                                                     await sock.sendMessage(chatId, {
                                                         video: mediaBuffer,
                                                         caption: caption,
-                                                        gifPlayback: false
+                                                        gifPlayback: false,
+                                                        jpegThumbnail: null, // Disable thumbnail compression
+                                                        viewOnce: false,
+                                                        mediaUploadTimeoutMs: 90000, // Longer timeout for HD video upload
                                                     }, { quoted: msg });
                                                 } else {
+                                                    // Send image in HD quality
                                                     await sock.sendMessage(chatId, {
                                                         image: mediaBuffer,
-                                                        caption: caption
+                                                        caption: caption,
+                                                        jpegThumbnail: null, // Disable thumbnail compression
+                                                        viewOnce: false,
+                                                        mediaUploadTimeoutMs: 60000, // Longer timeout for HD upload
                                                     }, { quoted: msg });
                                                 }
                                                 
@@ -1000,10 +1041,13 @@ async function startBot() {
                                     // Convert response to buffer
                                     const imageBuffer = Buffer.from(response.data);
                                     
-                                    // Send the image back to the user
+                                    // Send the image back to the user in HD quality
                                     await sock.sendMessage(chatId, {
                                         image: imageBuffer,
-                                        caption: `nih hasil gambar dari prompt: "${prompt}" (ukuran: ${size})`
+                                        caption: `nih hasil gambar dari prompt: "${prompt}" (ukuran: ${size})`,
+                                        jpegThumbnail: null, // Disable thumbnail compression
+                                        viewOnce: false,
+                                        mediaUploadTimeoutMs: 60000, // Longer timeout for HD upload
                                     }, { quoted: msg });
                                 } else {
                                     throw new Error(`API returned status ${response.status}`);
@@ -1071,10 +1115,13 @@ async function startBot() {
                                         resultMessage = "✅ kemungkinan besar gambar ini ASLI! ✅\n\nhasilnya: " + result.answer;
                                     }
                                     
-                                    // Send back the original image with analysis
+                                    // Send back the original image with analysis in HD
                                     await sock.sendMessage(chatId, {
                                         image: imageBuffer,
-                                        caption: resultMessage
+                                        caption: resultMessage,
+                                        jpegThumbnail: null, // Disable thumbnail compression
+                                        viewOnce: false,
+                                        mediaUploadTimeoutMs: 60000, // Longer timeout for HD upload
                                     }, { quoted: msg });
                                 } else {
                                     throw new Error('Invalid API response');
@@ -1143,10 +1190,13 @@ async function startBot() {
                                         `🔷 Bentuk Wajah: ${result.faceShape}\n` +
                                         `✨ Beauty Score: ${result.beautyScore}/100`;
                                     
-                                    // Send back the original image with analysis
+                                    // Send back the original image with analysis in HD
                                     await sock.sendMessage(chatId, {
                                         image: imageBuffer,
-                                        caption: resultMessage
+                                        caption: resultMessage,
+                                        jpegThumbnail: null, // Disable thumbnail compression
+                                        viewOnce: false,
+                                        mediaUploadTimeoutMs: 60000, // Longer timeout for HD upload
                                     }, { quoted: msg });
                                 } else {
                                     throw new Error('Invalid API response');
@@ -1395,10 +1445,21 @@ async function startBot() {
                     }
                     
                     // Process messages for Elz AI
-                    // First interaction OR ChatGPT mode is enabled OR bot is mentioned OR user is replying to bot
-                    // Tambahan: ignore foto tanpa caption perintah
-                    const shouldRespond = (isFirstInteraction || chatGPTEnabled[chatId] || isBotMentioned || isReplyingToBot) &&
-                        (!hasMedia || messageContent.trim() !== ''); // Tidak merespon jika hanya ada media tanpa caption
+                    // Untuk pesan dengan media (foto/video):
+                    // - HANYA respons jika bot di-tag atau di-reply, terlepas dari setting chatGPTEnabled
+                    // Untuk pesan teks biasa:
+                    // - Respons jika chatGPTEnabled atau bot di-tag/di-reply
+                    let shouldRespond = false;
+                    
+                    if (hasMedia) {
+                        // Untuk pesan dengan media, HARUS ada tag bot atau reply ke bot
+                        shouldRespond = (isBotMentioned || isReplyingToBot) && 
+                            (messageContent.trim() !== ''); // Harus ada caption
+                    } else {
+                        // Untuk pesan teks biasa, ikuti aturan normal
+                        shouldRespond = (isFirstInteraction || chatGPTEnabled[chatId] || isBotMentioned || isReplyingToBot) &&
+                            (messageContent.trim() !== '');
+                    }
                     
                     if (shouldRespond) {
                         // Create session ID jika belum ada
