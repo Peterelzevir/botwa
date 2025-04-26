@@ -1044,7 +1044,7 @@ async function startBot() {
                                     // Send the image back to the user in HD quality
                                     await sock.sendMessage(chatId, {
                                         image: imageBuffer,
-                                        caption: `nih hasil gambar dari prompt: "${prompt}" (ukuran: ${size})`,
+                                        caption: `nih hasil gambar bro!`,
                                         jpegThumbnail: null, // Disable thumbnail compression
                                         viewOnce: false,
                                         mediaUploadTimeoutMs: 60000, // Longer timeout for HD upload
