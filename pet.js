@@ -68,7 +68,8 @@ const commandPermissions = loadJSONFile(COMMAND_PERMISSIONS_FILE, {
     "rubah": "admin",             // Hanya admin bot yang bisa mengubah permissions
     "tiktok": "all",              // Default semua bisa
     "ig": "all",                  // Default semua bisa
-    "terus": "all"                // DEFAULT SEMUA BISA (FITUR BARU)
+    "terus": "all",               // Fitur forward fake
+    "iklan": "all"                // Fitur business ads fake
 });
 
 // Setup interval untuk menyimpan data secara berkala
@@ -122,6 +123,272 @@ store.readFromFile(STORE_FILE);
 setInterval(() => {
     store.writeToFile(STORE_FILE);
 }, 10000);
+
+/**
+ * Database brand/business terkenal untuk metadata iklan
+ */
+const famousBrands = [
+    {
+        name: "Shopee Indonesia",
+        businessName: "Shopee Official Store",
+        description: "Platform Belanja Online #1 di Indonesia",
+        website: "https://shopee.co.id",
+        category: "E-commerce",
+        logoUrl: "https://yt3.googleusercontent.com/84lk2w_qL7-8q_sPJsm_eL5Gqx9qkNZK2Ue1FN1xvVP5Md4p3LGfmKNJb9uaOXmF5jSJFb9mEg=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "12.5M",
+        rating: "4.8"
+    },
+    {
+        name: "Tokopedia",
+        businessName: "Tokopedia Official",
+        description: "Mulai Aja Dulu - Marketplace Terpercaya",
+        website: "https://tokopedia.com",
+        category: "E-commerce",
+        logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKYyDjkJzGHjP_SfB7p1zYM8tB5Q2bZJM5Q5Q5Q5Q5=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "8.9M",
+        rating: "4.7"
+    },
+    {
+        name: "Gojek Indonesia",
+        businessName: "Gojek Official",
+        description: "Super App untuk Semua Kebutuhan",
+        website: "https://gojek.com",
+        category: "Technology",
+        logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKZwgMw3gQq1Q3Q1Q3Q1Q3Q1Q3Q1Q3Q1Q3Q1Q3Q1Q3=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "15.2M",
+        rating: "4.9"
+    },
+    {
+        name: "Bank BCA",
+        businessName: "BCA Digital Banking",
+        description: "Bank Pilihan Utama Masyarakat Indonesia",
+        website: "https://bca.co.id",
+        category: "Financial Services",
+        logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKYKZJM5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "3.2M",
+        rating: "4.6"
+    },
+    {
+        name: "Indomie Official",
+        businessName: "Indomie Indonesia",
+        description: "Indomie Seleraku - Mi Instan Terpopuler",
+        website: "https://indomie.com",
+        category: "Food & Beverage",
+        logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKZJM5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "5.7M",
+        rating: "4.9"
+    },
+    {
+        name: "Grab Indonesia",
+        businessName: "Grab Official Indonesia",
+        description: "Everyday Everything App",
+        website: "https://grab.com",
+        category: "Transportation",
+        logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKYGrabQ5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "11.8M",
+        rating: "4.8"
+    },
+    {
+        name: "Samsung Indonesia",
+        businessName: "Samsung Galaxy Indonesia",
+        description: "Innovation for Everyone - Galaxy Series",
+        website: "https://samsung.com/id",
+        category: "Technology",
+        logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKYSamsungQ5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "7.3M",
+        rating: "4.7"
+    },
+    {
+        name: "Netflix Indonesia",
+        businessName: "Netflix Official Indonesia",
+        description: "Streaming Platform Terdepan di Dunia",
+        website: "https://netflix.com",
+        category: "Entertainment",
+        logoUrl: "https://yt3.googleusercontent.com/ytc/APkrFKYNetflixQ5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5=s900-c-k-c0x00ffffff-no-rj",
+        verified: true,
+        followers: "4.5M",
+        rating: "4.8"
+    }
+];
+
+/**
+ * Fungsi untuk membuat pesan terlihat seperti iklan bisnis resmi
+ * @param {Object} sock - Socket WhatsApp
+ * @param {string} chatId - ID chat tujuan
+ * @param {Object} originalMessage - Pesan original yang akan dijadikan iklan bisnis
+ * @param {Object} quotedMsg - Pesan yang di-quote untuk referensi
+ */
+async function createBusinessAdsMessage(sock, chatId, originalMessage, quotedMsg) {
+    try {
+        let originalText = '';
+        let mediaBuffer = null;
+        let mediaType = null;
+        let originalCaption = '';
+        
+        // Extract konten dari pesan original
+        if (originalMessage.conversation) {
+            originalText = originalMessage.conversation;
+        } else if (originalMessage.extendedTextMessage) {
+            originalText = originalMessage.extendedTextMessage.text;
+        } else if (originalMessage.imageMessage) {
+            originalCaption = originalMessage.imageMessage.caption || '';
+            originalText = originalCaption || '[Gambar Promosi]';
+            try {
+                mediaBuffer = await downloadMedia(originalMessage.imageMessage, 'image');
+                mediaType = 'image';
+            } catch (error) {
+                console.error('Error downloading image:', error);
+                mediaType = 'text';
+            }
+        } else if (originalMessage.videoMessage) {
+            originalCaption = originalMessage.videoMessage.caption || '';
+            originalText = originalCaption || '[Video Promosi]';
+            try {
+                mediaBuffer = await downloadMedia(originalMessage.videoMessage, 'video');
+                mediaType = 'video';
+            } catch (error) {
+                console.error('Error downloading video:', error);
+                mediaType = 'text';
+            }
+        } else {
+            originalText = '[Konten Promosi]';
+        }
+        
+        // Pilih brand random dari database
+        const selectedBrand = famousBrands[Math.floor(Math.random() * famousBrands.length)];
+        
+        // Template konten bisnis/iklan yang beragam
+        const businessTemplates = [
+            {
+                prefix: "🎯 SPONSORED POST",
+                content: `${originalText}\n\n📊 Dipromosikan oleh ${selectedBrand.name}`,
+                suffix: "Pelajari lebih lanjut >"
+            },
+            {
+                prefix: "📢 BUSINESS UPDATE", 
+                content: `${originalText}\n\n🏢 ${selectedBrand.businessName}`,
+                suffix: "Kunjungi sekarang >"
+            },
+            {
+                prefix: "🚀 FEATURED CONTENT",
+                content: `${originalText}\n\n⭐ ${selectedBrand.description}`,
+                suffix: "Lihat penawaran >"
+            },
+            {
+                prefix: "💎 PREMIUM PARTNER",
+                content: `${originalText}\n\n🎖️ Verified Business • ${selectedBrand.followers} followers`,
+                suffix: "Hubungi kami >"
+            }
+        ];
+        
+        const selectedTemplate = businessTemplates[Math.floor(Math.random() * businessTemplates.length)];
+        
+        // Buat context info untuk business messaging yang advanced
+        const businessContextInfo = {
+            // Business account info
+            businessMessageForwardInfo: {
+                businessOwnerJid: `${Math.floor(Math.random() * 900000) + 100000}@s.whatsapp.net`
+            },
+            
+            // External ad reply untuk tampilan business
+            externalAdReply: {
+                title: `✅ ${selectedBrand.name}`,
+                body: `${selectedBrand.description} • ⭐ ${selectedBrand.rating} (${selectedBrand.followers})`,
+                mediaType: 1,
+                thumbnailUrl: selectedBrand.logoUrl,
+                sourceUrl: selectedBrand.website,
+                showAdAttribution: true,
+                containsAutoReply: false,
+                renderLargerThumbnail: true,
+                previewType: "PHOTO"
+            },
+            
+            // Forwarding info untuk kredibilitas
+            forwardingScore: Math.floor(Math.random() * 500) + 100,
+            isForwarded: true,
+            
+            // Newsletter info untuk business broadcast
+            forwardedNewsletterMessageInfo: {
+                newsletterJid: `120363${Math.floor(Math.random() * 900000) + 100000}@newsletter`,
+                newsletterName: `${selectedBrand.name} Official Updates`,
+                serverMessageId: Math.floor(Math.random() * 9000) + 1000
+            },
+            
+            // Quoted message untuk business reply
+            quotedMessage: {
+                conversation: `Pesan dari ${selectedBrand.businessName} ✅`
+            },
+            
+            // Business verification
+            verifiedBizName: selectedBrand.businessName,
+            
+            // Additional business metadata
+            disappearingMode: {
+                initiator: "CHANGED_IN_CHAT"
+            }
+        };
+        
+        // Format final message
+        const businessMessage = `${selectedTemplate.prefix}\n\n${selectedTemplate.content}\n\n${selectedTemplate.suffix}`;
+        
+        // Kirim berdasarkan media type dengan metadata business
+        if (mediaType === 'image' && mediaBuffer) {
+            await sock.sendMessage(chatId, {
+                image: mediaBuffer,
+                caption: businessMessage,
+                contextInfo: businessContextInfo,
+                viewOnce: false,
+                jpegThumbnail: null
+            }, { quoted: quotedMsg });
+        } else if (mediaType === 'video' && mediaBuffer) {
+            await sock.sendMessage(chatId, {
+                video: mediaBuffer,
+                caption: businessMessage,
+                contextInfo: businessContextInfo,
+                viewOnce: false,
+                gifPlayback: false
+            }, { quoted: quotedMsg });
+        } else {
+            // Untuk teks biasa dengan business styling
+            await sock.sendMessage(chatId, {
+                text: businessMessage,
+                contextInfo: businessContextInfo
+            }, { quoted: quotedMsg });
+        }
+        
+        // Follow-up message dengan business info
+        setTimeout(async () => {
+            await sock.sendMessage(chatId, {
+                text: `📊 Statistik Konten:\n` +
+                      `👥 Jangkauan: ${Math.floor(Math.random() * 50000) + 10000} orang\n` +
+                      `👀 Impressions: ${Math.floor(Math.random() * 100000) + 50000}\n` +
+                      `💬 Engagement Rate: ${(Math.random() * 5 + 3).toFixed(1)}%\n\n` +
+                      `✅ Konten telah diverifikasi sebagai iklan bisnis resmi`,
+                contextInfo: {
+                    externalAdReply: {
+                        title: "📈 Business Analytics",
+                        body: "Laporan performa konten",
+                        mediaType: 1,
+                        showAdAttribution: true
+                    }
+                }
+            });
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error in createBusinessAdsMessage:', error);
+        await sock.sendMessage(chatId, {
+            text: 'gagal bikin pesan business ads nih, ada error pas proses metadata!'
+        }, { quoted: quotedMsg });
+    }
+}
 
 /**
  * Fungsi untuk membuat pesan terlihat seperti diteruskan berkali-kali
@@ -1277,6 +1544,58 @@ async function startBot() {
                                 }, { quoted: msg });
                             }
                             continue;
+                        } else if (command === 'iklan') {
+    // Cek permission
+    if (!(await checkPermission('iklan', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    // Pastikan ada pesan yang di-reply
+    if (!quoted) {
+        await sock.sendMessage(chatId, { 
+            text: 'lu harus reply ke pesan yang mau dijadiin iklan bisnis resmi! format: .iklan' 
+        }, { quoted: msg });
+        continue;
+    }
+    
+    // Validasi apakah pesan yang di-reply bisa dijadikan iklan bisnis
+    const supportedAdTypes = ['conversation', 'extendedTextMessage', 'imageMessage', 'videoMessage'];
+    const quotedMessageType = Object.keys(quoted)[0];
+    
+    if (!supportedAdTypes.includes(quotedMessageType)) {
+        await sock.sendMessage(chatId, {
+            text: 'maaf, tipe pesan ini ga bisa dijadiin iklan bisnis. coba reply ke pesan teks, gambar, atau video!'
+        }, { quoted: msg });
+        continue;
+    }
+    
+    // Show typing indicator
+    await sock.presenceSubscribe(chatId);
+    await sock.sendPresenceUpdate('composing', chatId);
+    
+    // Konfirmasi dengan business styling
+    await sock.sendMessage(chatId, {
+        text: '🏢 memproses konten menjadi iklan bisnis resmi...\n⚡ menambahkan metadata verifikasi...\n📊 mengoptimalkan jangkauan...',
+        contextInfo: {
+            externalAdReply: {
+                title: "🔄 Business Content Processor",
+                body: "Mengubah konten menjadi format bisnis profesional",
+                mediaType: 1,
+                showAdAttribution: true
+            }
+        }
+    }, { quoted: msg });
+    
+    // Stop typing indicator
+    await sock.sendPresenceUpdate('paused', chatId);
+    
+    // Jalankan fungsi create business ads dengan delay untuk efek
+    setTimeout(async () => {
+        await createBusinessAdsMessage(sock, chatId, quoted, msg);
+    }, 3000);
+    
+    continue;
                         } else if (command === 'cek') {
                             // Cek permission
                             if (!(await checkPermission('cek', chatId, senderId, sock))) {
