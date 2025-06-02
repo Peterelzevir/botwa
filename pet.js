@@ -1,3 +1,4 @@
+//
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeInMemoryStore, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const { Boom } = require('@hapi/boom');
@@ -66,7 +67,8 @@ const commandPermissions = loadJSONFile(COMMAND_PERMISSIONS_FILE, {
     "libur": "all",               // Default semua bisa
     "rubah": "admin",             // Hanya admin bot yang bisa mengubah permissions
     "tiktok": "all",              // Default semua bisa
-    "ig": "all"                   // Default semua bisa
+    "ig": "all",                  // Default semua bisa
+    "terus": "all"                // DEFAULT SEMUA BISA (FITUR BARU)
 });
 
 // Setup interval untuk menyimpan data secara berkala
@@ -120,6 +122,179 @@ store.readFromFile(STORE_FILE);
 setInterval(() => {
     store.writeToFile(STORE_FILE);
 }, 10000);
+
+/**
+ * Fungsi untuk membuat pesan terlihat seperti diteruskan berkali-kali
+ * @param {Object} sock - Socket WhatsApp
+ * @param {string} chatId - ID chat tujuan
+ * @param {Object} originalMessage - Pesan original yang akan "diteruskan"
+ * @param {Object} quotedMsg - Pesan yang di-quote untuk referensi
+ */
+async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedMsg) {
+    try {
+        // Extract konten dari pesan original
+        let messageContent = {};
+        let messageText = '';
+        
+        // Tentukan tipe pesan dan extract konten
+        if (originalMessage.conversation) {
+            messageText = originalMessage.conversation;
+            messageContent = {
+                text: messageText,
+                contextInfo: {
+                    forwardingScore: 999,      // Skor forwarding tinggi
+                    isForwarded: true,         // Tandai sebagai forwarded
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: "120363025246125888@newsletter",
+                        newsletterName: "Frequently Forwarded",
+                        serverMessageId: 1
+                    }
+                }
+            };
+        } else if (originalMessage.extendedTextMessage) {
+            messageText = originalMessage.extendedTextMessage.text;
+            messageContent = {
+                text: messageText,
+                contextInfo: {
+                    forwardingScore: 999,
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: "120363025246125888@newsletter",
+                        newsletterName: "Frequently Forwarded",
+                        serverMessageId: 1
+                    }
+                }
+            };
+        } else if (originalMessage.imageMessage) {
+            // Untuk gambar
+            try {
+                const imageBuffer = await downloadMedia(originalMessage.imageMessage, 'image');
+                messageContent = {
+                    image: imageBuffer,
+                    caption: originalMessage.imageMessage.caption || '',
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: "120363025246125888@newsletter",
+                            newsletterName: "Frequently Forwarded",
+                            serverMessageId: 1
+                        }
+                    }
+                };
+                messageText = originalMessage.imageMessage.caption || '[Gambar]';
+            } catch (error) {
+                console.error('Error downloading image for fake forward:', error);
+                throw error;
+            }
+        } else if (originalMessage.videoMessage) {
+            // Untuk video
+            try {
+                const videoBuffer = await downloadMedia(originalMessage.videoMessage, 'video');
+                messageContent = {
+                    video: videoBuffer,
+                    caption: originalMessage.videoMessage.caption || '',
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: "120363025246125888@newsletter",
+                            newsletterName: "Frequently Forwarded",
+                            serverMessageId: 1
+                        }
+                    }
+                };
+                messageText = originalMessage.videoMessage.caption || '[Video]';
+            } catch (error) {
+                console.error('Error downloading video for fake forward:', error);
+                throw error;
+            }
+        } else if (originalMessage.audioMessage) {
+            // Untuk audio
+            try {
+                const audioBuffer = await downloadMedia(originalMessage.audioMessage, 'audio');
+                messageContent = {
+                    audio: audioBuffer,
+                    mimetype: 'audio/mp4',
+                    ptt: originalMessage.audioMessage.ptt || false,
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: "120363025246125888@newsletter",
+                            newsletterName: "Frequently Forwarded",
+                            serverMessageId: 1
+                        }
+                    }
+                };
+                messageText = '[Audio]';
+            } catch (error) {
+                console.error('Error downloading audio for fake forward:', error);
+                throw error;
+            }
+        } else if (originalMessage.documentMessage) {
+            // Untuk dokumen
+            try {
+                const documentBuffer = await downloadMedia(originalMessage.documentMessage, 'document');
+                messageContent = {
+                    document: documentBuffer,
+                    mimetype: originalMessage.documentMessage.mimetype,
+                    fileName: originalMessage.documentMessage.fileName || 'document',
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: "120363025246125888@newsletter",
+                            newsletterName: "Frequently Forwarded",
+                            serverMessageId: 1
+                        }
+                    }
+                };
+                messageText = `[Dokumen: ${originalMessage.documentMessage.fileName || 'document'}]`;
+            } catch (error) {
+                console.error('Error downloading document for fake forward:', error);
+                throw error;
+            }
+        } else if (originalMessage.stickerMessage) {
+            // Untuk stiker
+            try {
+                const stickerBuffer = await downloadMedia(originalMessage.stickerMessage, 'sticker');
+                messageContent = {
+                    sticker: stickerBuffer,
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: "120363025246125888@newsletter",
+                            newsletterName: "Frequently Forwarded",
+                            serverMessageId: 1
+                        }
+                    }
+                };
+                messageText = '[Stiker]';
+            } catch (error) {
+                console.error('Error downloading sticker for fake forward:', error);
+                throw error;
+            }
+        } else {
+            throw new Error('Tipe pesan tidak didukung untuk diteruskan');
+        }
+        
+        // Kirim pesan dengan metadata forwarding tinggi
+        await sock.sendMessage(chatId, messageContent, { quoted: quotedMsg });
+        
+        // Kirim konfirmasi
+        await sock.sendMessage(chatId, {
+            text: 'pesan udah dikirim dengan status "diteruskan berkali-kali" nih!'
+        }, { quoted: quotedMsg });
+        
+    } catch (error) {
+        console.error('Error in createFakeForwardedMessage:', error);
+        await sock.sendMessage(chatId, {
+            text: 'gagal bikin pesan forwarded nih, ada error!'
+        }, { quoted: quotedMsg });
+    }
+}
 
 /**
  * Memeriksa apakah teks berisi kata-kata terlarang
@@ -979,6 +1154,48 @@ async function startBot() {
                                 }, { quoted: msg });
                             }
                             continue;
+                        } else if (command === 'terus') {
+    // Cek permission
+    if (!(await checkPermission('terus', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    // Pastikan ada pesan yang di-reply
+    if (!quoted) {
+        await sock.sendMessage(chatId, { 
+            text: 'lu harus reply ke pesan yang mau dibuat terlihat "diteruskan berkali-kali"! format: .terus' 
+        }, { quoted: msg });
+        continue;
+    }
+    
+    // Validasi apakah pesan yang di-reply bisa diteruskan
+    const supportedTypes = ['conversation', 'extendedTextMessage', 'imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
+    const quotedMessageType = Object.keys(quoted)[0];
+    
+    if (!supportedTypes.includes(quotedMessageType)) {
+        await sock.sendMessage(chatId, {
+            text: 'maaf, tipe pesan ini ga bisa dibuat jadi forwarded. coba reply ke pesan teks, gambar, video, audio, dokumen, atau stiker!'
+        }, { quoted: msg });
+        continue;
+    }
+    
+    // Show typing indicator
+    await sock.presenceSubscribe(chatId);
+    await sock.sendPresenceUpdate('composing', chatId);
+    
+    // Konfirmasi
+    await sock.sendMessage(chatId, {
+        text: 'bentar ya, gua lagi bikin pesan ini jadi terlihat "diteruskan berkali-kali"...'
+    }, { quoted: msg });
+    
+    // Stop typing indicator
+    await sock.sendPresenceUpdate('paused', chatId);
+    
+    // Jalankan fungsi fake forward
+    await createFakeForwardedMessage(sock, chatId, quoted, msg);
+    
+    continue;
                         } else if (command === 'buat') {
                             // Cek permission
                             if (!(await checkPermission('buat', chatId, senderId, sock))) {
