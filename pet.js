@@ -56,20 +56,31 @@ const firstTimeChats = loadJSONFile(FIRST_TIME_CHATS_FILE);
 const chatGPTEnabled = loadJSONFile(CHAT_GPT_ENABLED_FILE);
 const voiceMode = loadJSONFile(VOICE_MODE_FILE);
 const commandPermissions = loadJSONFile(COMMAND_PERMISSIONS_FILE, {
-    "rvo": "admin",                // Default hanya admin bot
-    "pet": "all",                 // Default semua bisa
-    "reset": "all",               // Default semua bisa
-    "buat": "all",                // Default semua bisa
-    "cek": "all",                 // Default semua bisa
-    "uy": "all",                  // Default semua bisa
-    "chord": "all",               // Default semua bisa
-    "p": "all",                   // Default semua bisa
-    "libur": "all",               // Default semua bisa
-    "rubah": "admin",             // Hanya admin bot yang bisa mengubah permissions
-    "tiktok": "all",              // Default semua bisa
-    "ig": "all",                  // Default semua bisa
-    "terus": "all",               // Fitur forward fake
-    "iklan": "all"                // Fitur business ads fake
+    "rvo": "admin",
+    "pet": "all", 
+    "reset": "all",
+    "buat": "all",
+    "cek": "all",
+    "uy": "all", 
+    "chord": "all",
+    "p": "all",
+    "libur": "all",
+    "rubah": "admin",
+    "tiktok": "all",
+    "ig": "all",
+    "terus": "all",
+    "iklan": "all", 
+    "clone": "all",
+    "waktu": "all",     // Time manipulation
+    "lokasi": "all",    // Location spoofing
+    "channel": "all",   // Channel/Newsletter spoofing
+    "urgent": "all",    // Emergency alert spoofing
+    "sistem": "all",    // WhatsApp system spoofing
+    "grup": "all",      // Group metadata spoofing
+    "broadcast": "all", // Broadcast list spoofing
+    "reply": "all",     // Fake quoted message
+    "viral": "all",     // Max credibility combo
+    "random": "all"     // Random metadata manipulation
 });
 
 // Setup interval untuk menyimpan data secara berkala
@@ -123,6 +134,680 @@ store.readFromFile(STORE_FILE);
 setInterval(() => {
     store.writeToFile(STORE_FILE);
 }, 10000);
+
+// ================== DATABASE UNTUK SPOOFING ==================
+
+const timeTemplates = [
+    { period: "kemarin", offset: -86400000 },
+    { period: "seminggu lalu", offset: -604800000 },
+    { period: "sebulan lalu", offset: -2629746000 },
+    { period: "tahun lalu", offset: -31556952000 },
+    { period: "besok", offset: 86400000 },
+    { period: "minggu depan", offset: 604800000 }
+];
+
+const worldLocations = [
+    { city: "Tokyo", country: "Japan", timezone: "+09:00", flag: "🇯🇵" },
+    { city: "New York", country: "USA", timezone: "-05:00", flag: "🇺🇸" },
+    { city: "London", country: "UK", timezone: "+00:00", flag: "🇬🇧" },
+    { city: "Paris", country: "France", timezone: "+01:00", flag: "🇫🇷" },
+    { city: "Dubai", country: "UAE", timezone: "+04:00", flag: "🇦🇪" },
+    { city: "Singapore", country: "Singapore", timezone: "+08:00", flag: "🇸🇬" },
+    { city: "Seoul", country: "South Korea", timezone: "+09:00", flag: "🇰🇷" },
+    { city: "Sydney", country: "Australia", timezone: "+11:00", flag: "🇦🇺" },
+    { city: "Berlin", country: "Germany", timezone: "+01:00", flag: "🇩🇪" },
+    { city: "Mumbai", country: "India", timezone: "+05:30", flag: "🇮🇳" }
+];
+
+const famousChannels = [
+    {
+        name: "Netflix Indonesia",
+        jid: "120363025246125888@newsletter",
+        subscribers: "12.5M",
+        verified: true,
+        category: "Entertainment",
+        description: "Official Netflix Indonesia Updates"
+    },
+    {
+        name: "WhatsApp",
+        jid: "120363019849162888@newsletter", 
+        subscribers: "2B",
+        verified: true,
+        category: "Technology",
+        description: "Official WhatsApp Updates"
+    },
+    {
+        name: "Spotify Indonesia",
+        jid: "120363028947361888@newsletter",
+        subscribers: "8.9M", 
+        verified: true,
+        category: "Music",
+        description: "Spotify Indonesia Official"
+    },
+    {
+        name: "Instagram",
+        jid: "120363031847625888@newsletter",
+        subscribers: "500M",
+        verified: true,
+        category: "Social Media", 
+        description: "Instagram Official Updates"
+    },
+    {
+        name: "YouTube Indonesia",
+        jid: "120363029847125888@newsletter",
+        subscribers: "15.2M",
+        verified: true,
+        category: "Video Platform",
+        description: "YouTube Indonesia Official"
+    }
+];
+
+const fakeGroups = [
+    "💎 VIP Millionaire Club",
+    "👀 Boyle Grup", 
+    "🚀 Tech Innovators Indonesia",
+    "👑 Njir",
+    "🎯 Digital Marketing Masters",
+    "💰 Crypto Millionaire Club",
+    "🔥 Startup Unicorn Indonesia",
+    "⚡ AI & Tech Leaders",
+    "🌟 Pier",
+    "💼 CEO & Founder Community"
+];
+
+// ================== HELPER FUNCTIONS ==================
+
+async function extractMessageContent(originalMessage) {
+    let content = {
+        text: '',
+        mediaBuffer: null,
+        mediaType: null,
+        caption: ''
+    };
+    
+    if (originalMessage.conversation) {
+        content.text = originalMessage.conversation;
+        content.mediaType = 'text';
+    } else if (originalMessage.extendedTextMessage) {
+        content.text = originalMessage.extendedTextMessage.text;
+        content.mediaType = 'text';
+    } else if (originalMessage.imageMessage) {
+        content.caption = originalMessage.imageMessage.caption || '';
+        content.text = content.caption;
+        try {
+            content.mediaBuffer = await downloadMedia(originalMessage.imageMessage, 'image');
+            content.mediaType = 'image';
+        } catch (error) {
+            content.mediaType = 'text';
+            content.text = content.caption || '[Gambar tidak dapat dimuat]';
+        }
+    } else if (originalMessage.videoMessage) {
+        content.caption = originalMessage.videoMessage.caption || '';
+        content.text = content.caption;
+        try {
+            content.mediaBuffer = await downloadMedia(originalMessage.videoMessage, 'video');
+            content.mediaType = 'video';
+        } catch (error) {
+            content.mediaType = 'text';
+            content.text = content.caption || '[Video tidak dapat dimuat]';
+        }
+    } else if (originalMessage.audioMessage) {
+        try {
+            content.mediaBuffer = await downloadMedia(originalMessage.audioMessage, 'audio');
+            content.mediaType = 'audio';
+            content.text = '[Pesan Suara]';
+        } catch (error) {
+            content.mediaType = 'text';
+            content.text = '[Audio tidak dapat dimuat]';
+        }
+    } else if (originalMessage.stickerMessage) {
+        try {
+            content.mediaBuffer = await downloadMedia(originalMessage.stickerMessage, 'sticker');
+            content.mediaType = 'sticker';
+            content.text = '[Stiker]';
+        } catch (error) {
+            content.mediaType = 'text';
+            content.text = '[Stiker tidak dapat dimuat]';
+        }
+    }
+    
+    return content;
+}
+
+async function sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage) {
+    const messageOptions = {
+        contextInfo: contextInfo,
+        viewOnce: false
+    };
+    
+    if (content.mediaType === 'image' && content.mediaBuffer) {
+        await sock.sendMessage(chatId, {
+            image: content.mediaBuffer,
+            caption: content.text,
+            ...messageOptions
+        });
+    } else if (content.mediaType === 'video' && content.mediaBuffer) {
+        await sock.sendMessage(chatId, {
+            video: content.mediaBuffer,
+            caption: content.text,
+            ...messageOptions
+        });
+    } else if (content.mediaType === 'audio' && content.mediaBuffer) {
+        await sock.sendMessage(chatId, {
+            audio: content.mediaBuffer,
+            mimetype: 'audio/mp4',
+            ptt: originalMessage.audioMessage?.ptt || false,
+            ...messageOptions
+        });
+    } else if (content.mediaType === 'sticker' && content.mediaBuffer) {
+        await sock.sendMessage(chatId, {
+            sticker: content.mediaBuffer,
+            ...messageOptions
+        });
+    } else {
+        await sock.sendMessage(chatId, {
+            text: content.text,
+            ...messageOptions
+        });
+    }
+}
+
+// ================== MANIPULATION FUNCTIONS ==================
+
+// 1. WAKTU - Time Manipulation
+async function manipulateTime(sock, chatId, originalMessage, timeParam) {
+    const content = await extractMessageContent(originalMessage);
+    let targetTime = new Date();
+    
+    // Parse time parameter
+    if (timeParam) {
+        const yearMatch = timeParam.match(/(\d{4})/);
+        if (yearMatch) {
+            targetTime = new Date(`${yearMatch[1]}-01-01`);
+        } else {
+            const template = timeTemplates.find(t => timeParam.includes(t.period.split(' ')[0]));
+            if (template) {
+                targetTime = new Date(Date.now() + template.offset);
+            }
+        }
+    }
+    
+    const contextInfo = {
+        messageTimestamp: Math.floor(targetTime.getTime() / 1000),
+        ephemeralExpiration: 86400,
+        externalAdReply: {
+            title: `⏰ ${targetTime.toLocaleDateString('id-ID')}`,
+            body: `Dikirim pada ${targetTime.toLocaleString('id-ID')}`,
+            mediaType: 1,
+            showAdAttribution: true
+        },
+        forwardingScore: Math.floor(Math.random() * 100) + 50,
+        isForwarded: true,
+        disappearingMode: { initiator: "CHANGED_IN_CHAT" }
+    };
+    
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 2. LOKASI - Location Spoofing  
+async function manipulateLocation(sock, chatId, originalMessage, locationParam) {
+    const content = await extractMessageContent(originalMessage);
+    const location = worldLocations.find(l => 
+        locationParam && l.city.toLowerCase().includes(locationParam.toLowerCase())
+    ) || worldLocations[Math.floor(Math.random() * worldLocations.length)];
+    
+    const contextInfo = {
+        externalAdReply: {
+            title: `📍 ${location.flag} ${location.city}, ${location.country}`,
+            body: `Dikirim dari ${location.city} • ${location.timezone}`,
+            mediaType: 1,
+            showAdAttribution: true
+        },
+        forwardingScore: Math.floor(Math.random() * 200) + 100,
+        isForwarded: true,
+        disappearingMode: { initiator: "CHANGED_IN_CHAT" },
+        quotedMessage: {
+            conversation: `Pesan dari ${location.city}, ${location.country}`
+        }
+    };
+    
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 3. CHANNEL - Newsletter/Channel Spoofing
+async function manipulateChannel(sock, chatId, originalMessage) {
+    const content = await extractMessageContent(originalMessage);
+    const channel = famousChannels[Math.floor(Math.random() * famousChannels.length)];
+    
+    const contextInfo = {
+        forwardedNewsletterMessageInfo: {
+            newsletterJid: channel.jid,
+            newsletterName: channel.name,
+            serverMessageId: Math.floor(Math.random() * 9000) + 1000
+        },
+        externalAdReply: {
+            title: `✅ ${channel.name}`,
+            body: `${channel.subscribers} subscribers • ${channel.category}`,
+            mediaType: 1,
+            showAdAttribution: true
+        },
+        forwardingScore: Math.floor(Math.random() * 500) + 200,
+        isForwarded: true,
+        verifiedBizName: channel.name
+    };
+    
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 4. URGENT - Emergency Alert Spoofing
+async function manipulateUrgent(sock, chatId, originalMessage) {
+    const content = await extractMessageContent(originalMessage);
+    
+    const urgentText = `🚨 PERINGATAN PENTING 🚨\n\n${content.text}\n\n⚠️ Pesan prioritas tinggi`;
+    
+    const contextInfo = {
+        externalAdReply: {
+            title: "🚨 EMERGENCY ALERT",
+            body: "Pesan Prioritas Tinggi • Segera Dibaca",
+            mediaType: 1,
+            showAdAttribution: true,
+            renderLargerThumbnail: true
+        },
+        forwardingScore: 999,
+        isForwarded: true,
+        mentionedJid: [],
+        ephemeralExpiration: 3600,
+        disappearingMode: { initiator: "CHANGED_IN_CHAT" }
+    };
+    
+    content.text = urgentText;
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 5. SISTEM - WhatsApp System Spoofing
+async function manipulateSistem(sock, chatId, originalMessage) {
+    const content = await extractMessageContent(originalMessage);
+    
+    const systemText = `🤖 WhatsApp System Message\n\n${content.text}\n\n━━━━━━━━━━━━━━━━━━━━\nOfficial WhatsApp Notification`;
+    
+    const contextInfo = {
+        externalAdReply: {
+            title: "WhatsApp",
+            body: "Official System Message • WhatsApp Inc.",
+            mediaType: 1,
+            showAdAttribution: true,
+            thumbnailUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg"
+        },
+        verifiedBizName: "WhatsApp",
+        businessMessageForwardInfo: {
+            businessOwnerJid: "0@s.whatsapp.net"
+        },
+        forwardingScore: 1000,
+        isForwarded: true
+    };
+    
+    content.text = systemText;
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 6. GRUP - Group Metadata Spoofing
+async function manipulateGrup(sock, chatId, originalMessage, groupParam) {
+    const content = await extractMessageContent(originalMessage);
+    const groupName = groupParam || fakeGroups[Math.floor(Math.random() * fakeGroups.length)];
+    
+    const contextInfo = {
+        externalAdReply: {
+            title: `👥 ${groupName}`,
+            body: `Pesan dari grup • ${Math.floor(Math.random() * 5000) + 100} anggota`,
+            mediaType: 1,
+            showAdAttribution: true
+        },
+        forwardingScore: Math.floor(Math.random() * 300) + 150,
+        isForwarded: true,
+        quotedMessage: {
+            conversation: `Pesan dari grup: ${groupName}`
+        },
+        mentionedJid: [`${Math.floor(Math.random() * 900000) + 100000}@s.whatsapp.net`]
+    };
+    
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 7. BROADCAST - Broadcast List Spoofing
+async function manipulateBroadcast(sock, chatId, originalMessage) {
+    const content = await extractMessageContent(originalMessage);
+    
+    const contextInfo = {
+        externalAdReply: {
+            title: "📡 VIP Broadcast List",
+            body: `${Math.floor(Math.random() * 10000) + 1000} penerima • Broadcast Eksklusif`,
+            mediaType: 1,
+            showAdAttribution: true
+        },
+        forwardingScore: Math.floor(Math.random() * 800) + 200,
+        isForwarded: true,
+        forwardedNewsletterMessageInfo: {
+            newsletterJid: `120363${Math.floor(Math.random() * 900000) + 100000}@newsletter`,
+            newsletterName: "VIP Broadcast Network",
+            serverMessageId: Math.floor(Math.random() * 9000) + 1000
+        },
+        disappearingMode: { initiator: "CHANGED_IN_CHAT" }
+    };
+    
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 8. REPLY - Fake Quoted Message
+async function manipulateReply(sock, chatId, originalMessage, fakeReplyText) {
+    const content = await extractMessageContent(originalMessage);
+    const replyText = fakeReplyText || "Pesan rahasia yang sudah dihapus";
+    
+    const contextInfo = {
+        quotedMessage: {
+            conversation: replyText
+        },
+        quotedMessageId: `FAKE_${Date.now()}`,
+        quotedParticipant: `${Math.floor(Math.random() * 900000) + 100000}@s.whatsapp.net`,
+        externalAdReply: {
+            title: "💬 Membalas Pesan",
+            body: `"${replyText.substring(0, 50)}${replyText.length > 50 ? '...' : ''}"`,
+            mediaType: 1,
+            showAdAttribution: true
+        },
+        forwardingScore: Math.floor(Math.random() * 100) + 50,
+        isForwarded: true
+    };
+    
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 9. VIRAL - Max Credibility Combo
+async function manipulateViral(sock, chatId, originalMessage) {
+    const content = await extractMessageContent(originalMessage);
+    const channel = famousChannels[Math.floor(Math.random() * famousChannels.length)];
+    const location = worldLocations[Math.floor(Math.random() * worldLocations.length)];
+    
+    const viralText = `🔥 VIRAL TRENDING 🔥\n\n${content.text}\n\n📈 ${Math.floor(Math.random() * 500000) + 100000} views • 🔄 ${Math.floor(Math.random() * 50000) + 10000} shares`;
+    
+    const contextInfo = {
+        forwardingScore: 999,
+        isForwarded: true,
+        forwardedNewsletterMessageInfo: {
+            newsletterJid: channel.jid,
+            newsletterName: channel.name,
+            serverMessageId: Math.floor(Math.random() * 9000) + 1000
+        },
+        externalAdReply: {
+            title: `🚀 TRENDING • ${location.flag} ${location.city}`,
+            body: `${channel.name} • ${channel.subscribers} subscribers • Viral Content`,
+            mediaType: 1,
+            showAdAttribution: true,
+            renderLargerThumbnail: true
+        },
+        verifiedBizName: channel.name,
+        businessMessageForwardInfo: {
+            businessOwnerJid: `${Math.floor(Math.random() * 900000) + 100000}@s.whatsapp.net`
+        },
+        quotedMessage: {
+            conversation: `🔥 Konten viral dari ${channel.name}`
+        },
+        ephemeralExpiration: 86400,
+        disappearingMode: { initiator: "CHANGED_IN_CHAT" }
+    };
+    
+    content.text = viralText;
+    await sendSpoofedMessage(sock, chatId, content, contextInfo, originalMessage);
+}
+
+// 10. RANDOM - Random Combination
+async function manipulateRandom(sock, chatId, originalMessage) {
+    const manipulations = [
+        () => manipulateTime(sock, chatId, originalMessage, null),
+        () => manipulateLocation(sock, chatId, originalMessage, null),
+        () => manipulateChannel(sock, chatId, originalMessage),
+        () => manipulateUrgent(sock, chatId, originalMessage),
+        () => manipulateSistem(sock, chatId, originalMessage),
+        () => manipulateGrup(sock, chatId, originalMessage, null),
+        () => manipulateBroadcast(sock, chatId, originalMessage),
+        () => manipulateReply(sock, chatId, originalMessage, null),
+        () => manipulateViral(sock, chatId, originalMessage)
+    ];
+    
+    const randomManipulation = manipulations[Math.floor(Math.random() * manipulations.length)];
+    await randomManipulation();
+}
+
+/**
+ * Fungsi untuk mendapatkan info pengirim dari quoted message
+ * @param {Object} quotedMessage - Pesan yang di-quote
+ * @param {Object} sock - Socket WhatsApp
+ * @param {string} chatId - ID chat
+ * @returns {Object} Info pengirim (nama, nomor, dll)
+ */
+async function getOriginalSenderInfo(quotedMessage, sock, chatId) {
+    try {
+        let senderJid = '';
+        let senderName = '';
+        let senderNumber = '';
+        
+        // Extract sender JID dari context atau message key
+        if (quotedMessage.key && quotedMessage.key.participant) {
+            senderJid = quotedMessage.key.participant;
+        } else if (quotedMessage.key && quotedMessage.key.remoteJid) {
+            senderJid = quotedMessage.key.remoteJid;
+        }
+        
+        // Extract nomor dari JID
+        senderNumber = senderJid.split('@')[0];
+        
+        // Coba ambil nama dari contact atau group
+        try {
+            if (chatId.endsWith('@g.us')) {
+                // Jika grup, ambil nama dari metadata grup
+                const groupMetadata = await sock.groupMetadata(chatId);
+                const participant = groupMetadata.participants.find(p => p.id === senderJid);
+                if (participant) {
+                    senderName = participant.notify || participant.verifiedName || `+${senderNumber}`;
+                }
+            } else {
+                // Jika chat pribadi, coba ambil dari contact
+                senderName = `+${senderNumber}`;
+            }
+        } catch (error) {
+            senderName = `+${senderNumber}`;
+        }
+        
+        // Fallback jika nama kosong
+        if (!senderName || senderName.trim() === '') {
+            senderName = `User ${senderNumber.slice(-4)}`;
+        }
+        
+        return {
+            jid: senderJid,
+            name: senderName,
+            number: senderNumber
+        };
+    } catch (error) {
+        console.error('Error getting original sender info:', error);
+        return {
+            jid: '0@s.whatsapp.net',
+            name: 'Unknown User',
+            number: '0'
+        };
+    }
+}
+
+/**
+ * Fungsi untuk membuat pesan clone dengan spoofing sender
+ * @param {Object} sock - Socket WhatsApp
+ * @param {string} chatId - ID chat tujuan
+ * @param {Object} originalMessage - Pesan original yang akan di-clone
+ * @param {Object} quotedMsg - Pesan yang di-quote untuk referensi
+ * @param {Object} messageKey - Key dari pesan original
+ */
+async function createClonedMessage(sock, chatId, originalMessage, quotedMsg, messageKey) {
+    try {
+        // Get info pengirim original
+        const originalSender = await getOriginalSenderInfo({ key: messageKey }, sock, chatId);
+        
+        let originalText = '';
+        let mediaBuffer = null;
+        let mediaType = null;
+        let originalCaption = '';
+        
+        // Extract konten dari pesan original
+        if (originalMessage.conversation) {
+            originalText = originalMessage.conversation;
+        } else if (originalMessage.extendedTextMessage) {
+            originalText = originalMessage.extendedTextMessage.text;
+        } else if (originalMessage.imageMessage) {
+            originalCaption = originalMessage.imageMessage.caption || '';
+            originalText = originalCaption;
+            try {
+                mediaBuffer = await downloadMedia(originalMessage.imageMessage, 'image');
+                mediaType = 'image';
+            } catch (error) {
+                console.error('Error downloading image for clone:', error);
+                mediaType = 'text';
+                originalText = originalCaption || '[Gambar tidak dapat dimuat]';
+            }
+        } else if (originalMessage.videoMessage) {
+            originalCaption = originalMessage.videoMessage.caption || '';
+            originalText = originalCaption;
+            try {
+                mediaBuffer = await downloadMedia(originalMessage.videoMessage, 'video');
+                mediaType = 'video';
+            } catch (error) {
+                console.error('Error downloading video for clone:', error);
+                mediaType = 'text';
+                originalText = originalCaption || '[Video tidak dapat dimuat]';
+            }
+        } else if (originalMessage.audioMessage) {
+            try {
+                mediaBuffer = await downloadMedia(originalMessage.audioMessage, 'audio');
+                mediaType = 'audio';
+                originalText = '[Pesan Suara]';
+            } catch (error) {
+                console.error('Error downloading audio for clone:', error);
+                mediaType = 'text';
+                originalText = '[Pesan suara tidak dapat dimuat]';
+            }
+        } else if (originalMessage.stickerMessage) {
+            try {
+                mediaBuffer = await downloadMedia(originalMessage.stickerMessage, 'sticker');
+                mediaType = 'sticker';
+                originalText = '[Stiker]';
+            } catch (error) {
+                console.error('Error downloading sticker for clone:', error);
+                mediaType = 'text';
+                originalText = '[Stiker tidak dapat dimuat]';
+            }
+        } else {
+            originalText = '[Pesan tidak didukung]';
+        }
+        
+        // Buat context info untuk spoofing sender dengan format ads
+        const cloneContextInfo = {
+            // Spoof sender info
+            participant: originalSender.jid,
+            
+            // Business message forwarding untuk legitimasi
+            businessMessageForwardInfo: {
+                businessOwnerJid: originalSender.jid
+            },
+            
+            // External ad reply untuk tampilan sponsored
+            externalAdReply: {
+                title: `📢 ${originalSender.name}`,
+                body: `Pesan dari ${originalSender.name} • Sponsored Content`,
+                mediaType: 1,
+                thumbnailUrl: "https://i.ibb.co/3Fh9V6p/avatar-default.png",
+                sourceUrl: `https://wa.me/${originalSender.number}`,
+                showAdAttribution: true,
+                containsAutoReply: false,
+                renderLargerThumbnail: false,
+                previewType: "PHOTO"
+            },
+            
+            // Forwarding info untuk kredibilitas
+            forwardingScore: Math.floor(Math.random() * 300) + 50,
+            isForwarded: true,
+            
+            // Quoted message spoofing
+            quotedMessage: {
+                conversation: `Pesan asli dari ${originalSender.name}`
+            },
+            quotedMessageId: messageKey.id,
+            quotedParticipant: originalSender.jid,
+            
+            // Newsletter info untuk broadcast effect
+            forwardedNewsletterMessageInfo: {
+                newsletterJid: `120363${Math.floor(Math.random() * 900000) + 100000}@newsletter`,
+                newsletterName: `${originalSender.name} Official`,
+                serverMessageId: Math.floor(Math.random() * 9000) + 1000
+            },
+            
+            // Additional spoofing metadata
+            mentionedJid: [originalSender.jid],
+            
+            // Business verification spoofing
+            verifiedBizName: originalSender.name,
+            
+            // Message timestamp spoofing
+            ephemeralExpiration: 86400,
+            
+            // Disappearing mode
+            disappearingMode: {
+                initiator: "CHANGED_IN_CHAT"
+            }
+        };
+        
+        // Kirim berdasarkan media type dengan metadata spoofing
+        if (mediaType === 'image' && mediaBuffer) {
+            await sock.sendMessage(chatId, {
+                image: mediaBuffer,
+                caption: originalText,
+                contextInfo: cloneContextInfo,
+                viewOnce: false,
+                jpegThumbnail: null,
+                mediaUploadTimeoutMs: 60000
+            });
+        } else if (mediaType === 'video' && mediaBuffer) {
+            await sock.sendMessage(chatId, {
+                video: mediaBuffer,
+                caption: originalText,
+                contextInfo: cloneContextInfo,
+                viewOnce: false,
+                gifPlayback: false,
+                mediaUploadTimeoutMs: 90000
+            });
+        } else if (mediaType === 'audio' && mediaBuffer) {
+            await sock.sendMessage(chatId, {
+                audio: mediaBuffer,
+                mimetype: 'audio/mp4',
+                ptt: originalMessage.audioMessage?.ptt || false,
+                contextInfo: cloneContextInfo
+            });
+        } else if (mediaType === 'sticker' && mediaBuffer) {
+            await sock.sendMessage(chatId, {
+                sticker: mediaBuffer,
+                contextInfo: cloneContextInfo
+            });
+        } else {
+            // Untuk teks biasa dengan spoofing
+            await sock.sendMessage(chatId, {
+                text: originalText,
+                contextInfo: cloneContextInfo
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error in createClonedMessage:', error);
+        await sock.sendMessage(chatId, {
+            text: 'gagal clone pesan nih, ada error pas proses spoofing!'
+        }, { quoted: quotedMsg });
+    }
+}
 
 /**
  * Database brand/business terkenal untuk metadata iklan
@@ -1800,6 +2485,58 @@ async function startBot() {
                                 }, { quoted: msg });
                             }
                             continue;
+                        } else if (command === 'clone') {
+    // Cek permission
+    if (!(await checkPermission('clone', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    // Pastikan ada pesan yang di-reply
+    if (!quoted) {
+        await sock.sendMessage(chatId, { 
+            text: 'lu harus reply ke pesan yang mau di-clone! format: .clone' 
+        }, { quoted: msg });
+        continue;
+    }
+    
+    // Ambil message key dari quoted message untuk spoofing
+    let originalMessageKey = null;
+    if (msg.message.extendedTextMessage?.contextInfo?.quotedMessage) {
+        originalMessageKey = {
+            id: msg.message.extendedTextMessage.contextInfo.stanzaId,
+            participant: msg.message.extendedTextMessage.contextInfo.participant,
+            remoteJid: chatId
+        };
+    }
+    
+    // Fallback jika tidak ada message key
+    if (!originalMessageKey) {
+        originalMessageKey = {
+            id: `CLONE_${Date.now()}`,
+            participant: `${Math.floor(Math.random() * 900000) + 100000}@s.whatsapp.net`,
+            remoteJid: chatId
+        };
+    }
+    
+    // Validasi tipe pesan yang didukung
+    const supportedCloneTypes = [
+        'conversation', 'extendedTextMessage', 'imageMessage', 
+        'videoMessage', 'audioMessage', 'stickerMessage'
+    ];
+    const quotedMessageType = Object.keys(quoted)[0];
+    
+    if (!supportedCloneTypes.includes(quotedMessageType)) {
+        await sock.sendMessage(chatId, {
+            text: 'maaf, tipe pesan ini ga bisa di-clone. coba reply ke pesan teks, gambar, video, audio, atau stiker!'
+        }, { quoted: msg });
+        continue;
+    }
+    
+    // Langsung jalankan clone tanpa pesan proses
+    await createClonedMessage(sock, chatId, quoted, msg, originalMessageKey);
+    
+    continue;
                         } else if (command === 'p') {
                             // Cek permission
                             if (!(await checkPermission('p', chatId, senderId, sock))) {
@@ -1862,6 +2599,145 @@ async function startBot() {
                                 }, { quoted: msg });
                             }
                             continue;
+                        } else if (command === 'waktu') {
+    if (!(await checkPermission('waktu', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dimanipulasi waktunya! format: .waktu [tahun/kemarin/besok]' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateTime(sock, chatId, quoted, commandParams);
+    continue;
+
+} else if (command === 'lokasi') {
+    if (!(await checkPermission('lokasi', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dimanipulasi lokasinya! format: .lokasi [nama kota]' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateLocation(sock, chatId, quoted, commandParams);
+    continue;
+
+} else if (command === 'channel') {
+    if (!(await checkPermission('channel', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dijadiin dari channel terkenal!' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateChannel(sock, chatId, quoted);
+    continue;
+
+} else if (command === 'urgent') {
+    if (!(await checkPermission('urgent', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dijadiin emergency alert!' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateUrgent(sock, chatId, quoted);
+    continue;
+
+} else if (command === 'sistem') {
+    if (!(await checkPermission('sistem', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dijadiin system message WhatsApp!' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateSistem(sock, chatId, quoted);
+    continue;
+
+} else if (command === 'grup') {
+    if (!(await checkPermission('grup', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dijadiin dari grup fake! format: .grup [nama grup]' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateGrup(sock, chatId, quoted, commandParams);
+    continue;
+
+} else if (command === 'broadcast') {
+    if (!(await checkPermission('broadcast', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dijadiin dari broadcast VIP!' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateBroadcast(sock, chatId, quoted);
+    continue;
+
+} else if (command === 'reply') {
+    if (!(await checkPermission('reply', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dijadiin reply fake! format: .reply [pesan fake]' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateReply(sock, chatId, quoted, commandParams);
+    continue;
+
+} else if (command === 'viral') {
+    if (!(await checkPermission('viral', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dijadiin viral dengan kredibilitas maksimal!' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateViral(sock, chatId, quoted);
+    continue;
+
+} else if (command === 'random') {
+    if (!(await checkPermission('random', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    if (!quoted) {
+        await sock.sendMessage(chatId, { text: 'reply ke pesan yang mau dimanipulasi secara random!' }, { quoted: msg });
+        continue;
+    }
+    
+    await manipulateRandom(sock, chatId, quoted);
+    continue;
                         } else if (command === 'libur') {
                             // Cek permission
                             if (!(await checkPermission('libur', chatId, senderId, sock))) {
