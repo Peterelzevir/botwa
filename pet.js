@@ -1098,7 +1098,7 @@ async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedM
                     isForwarded: true,         // Tandai sebagai forwarded
                     forwardedNewsletterMessageInfo: {
                         newsletterJid: "120363025246125888@newsletter",
-                        newsletterName: "Frequently Forwarded",
+                        newsletterName: "Peringatan",
                         serverMessageId: 1
                     }
                 }
@@ -1112,7 +1112,7 @@ async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedM
                     isForwarded: true,
                     forwardedNewsletterMessageInfo: {
                         newsletterJid: "120363025246125888@newsletter",
-                        newsletterName: "Frequently Forwarded",
+                        newsletterName: "Peringatan",
                         serverMessageId: 1
                     }
                 }
@@ -1129,7 +1129,7 @@ async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedM
                         isForwarded: true,
                         forwardedNewsletterMessageInfo: {
                             newsletterJid: "120363025246125888@newsletter",
-                            newsletterName: "Frequently Forwarded",
+                            newsletterName: "Peringatan",
                             serverMessageId: 1
                         }
                     }
@@ -1151,7 +1151,7 @@ async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedM
                         isForwarded: true,
                         forwardedNewsletterMessageInfo: {
                             newsletterJid: "120363025246125888@newsletter",
-                            newsletterName: "Frequently Forwarded",
+                            newsletterName: "Peringatan",
                             serverMessageId: 1
                         }
                     }
@@ -1174,7 +1174,7 @@ async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedM
                         isForwarded: true,
                         forwardedNewsletterMessageInfo: {
                             newsletterJid: "120363025246125888@newsletter",
-                            newsletterName: "Frequently Forwarded",
+                            newsletterName: "Peringatan",
                             serverMessageId: 1
                         }
                     }
@@ -1197,7 +1197,7 @@ async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedM
                         isForwarded: true,
                         forwardedNewsletterMessageInfo: {
                             newsletterJid: "120363025246125888@newsletter",
-                            newsletterName: "Frequently Forwarded",
+                            newsletterName: "Peringatan",
                             serverMessageId: 1
                         }
                     }
@@ -1218,7 +1218,7 @@ async function createFakeForwardedMessage(sock, chatId, originalMessage, quotedM
                         isForwarded: true,
                         forwardedNewsletterMessageInfo: {
                             newsletterJid: "120363025246125888@newsletter",
-                            newsletterName: "Frequently Forwarded",
+                            newsletterName: "Peringatan",
                             serverMessageId: 1
                         }
                     }
