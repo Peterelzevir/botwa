@@ -81,6 +81,7 @@ const commandPermissions = loadJSONFile(COMMAND_PERMISSIONS_FILE, {
     "reply": "all",     // Fake quoted message
     "viral": "all",     // Max credibility combo
     "random": "all"     // Random metadata manipulation
+    "s": "all" // y
 });
 
 // Setup interval untuk menyimpan data secara berkala
@@ -2805,6 +2806,73 @@ async function startBot() {
                                 }, { quoted: msg });
                             }
                             continue;
+                        } else if (command === 's') {
+    // Cek permission
+    if (!(await checkPermission('s', chatId, senderId, sock))) {
+        await sock.sendMessage(chatId, { text: 'lu ga punya akses buat pake fitur ini cuk!' }, { quoted: msg });
+        continue;
+    }
+    
+    // Cari media untuk dijadikan stiker
+    let mediaToConvert;
+    let mediaBuffer;
+    
+    if (hasMedia && (mediaType === 'image' || mediaType === 'video')) {
+        // Media ada di pesan saat ini
+        mediaToConvert = mediaObj;
+        mediaBuffer = await downloadMedia(mediaToConvert, mediaType);
+    } else if (quoted && (quoted.imageMessage || quoted.videoMessage)) {
+        // Media ada di pesan yang di-reply
+        mediaToConvert = quoted.imageMessage || quoted.videoMessage;
+        mediaBuffer = await downloadMedia(mediaToConvert, mediaToConvert.mimetype.startsWith('image') ? 'image' : 'video');
+    } else {
+        await sock.sendMessage(chatId, {
+            text: 'lu harus kirim gambar/video atau reply gambar/video pake .s'
+        }, { quoted: msg });
+        continue;
+    }
+    
+    try {
+        // Show typing indicator
+        await sock.presenceSubscribe(chatId);
+        await sock.sendPresenceUpdate('composing', chatId);
+        
+        // Upload media ke server untuk konversi
+        const fileName = `sticker_${Date.now()}.${mediaToConvert.mimetype.split('/')[1]}`;
+        const mediaUrl = await uploadMediaToServer(mediaBuffer, fileName);
+        
+        // Make API request untuk convert ke stiker
+        const response = await axios.get(IMAGE_UPLOAD_API_URL, {
+            params: { 
+                url: mediaUrl,
+                watermark: 'lho lho'
+            },
+            responseType: 'arraybuffer',
+            timeout: 60000
+        });
+        
+        // Stop typing indicator
+        await sock.sendPresenceUpdate('paused', chatId);
+        
+        // Proses response
+        if (response.status === 200) {
+            const stickerBuffer = Buffer.from(response.data);
+            
+            // Kirim stiker
+            await sock.sendMessage(chatId, {
+                sticker: stickerBuffer
+            }, { quoted: msg });
+        } else {
+            throw new Error('Gagal convert ke stiker');
+        }
+    } catch (error) {
+        console.error('Error membuat stiker:', error);
+        await sock.sendPresenceUpdate('paused', chatId);
+        await sock.sendMessage(chatId, {
+            text: 'gua gagal bikin stiker nih, coba lagi ya!'
+        }, { quoted: msg });
+    }
+    continue;
                         } else if (command === 'rubah') {
                             // Cek permission (hanya admin bot yang bisa mengubah permissions)
                             if (!(await checkPermission('rubah', chatId, senderId, sock))) {
